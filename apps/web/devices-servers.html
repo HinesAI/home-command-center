@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HCC | Servers</title>
+    <link rel="stylesheet" href="./styles.css?v=23" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="./index.html"><span class="brand-mark">H</span><span><strong>Home Command Center</strong></span></a>
+        <nav id="appNav" class="app-nav"></nav>
+        <div class="session-tools">
+          <span id="authUserLabel" class="user-label"></span>
+          <a id="adminNavLink" href="./admin.html">Admin</a>
+          <button id="logoutBtn" type="button">Logout</button>
+        </div>
+      </header>
+      <main class="dashboard page-grid">
+        <section class="page-title">
+          <div><p class="eyebrow">Device hub</p><h1>All Servers</h1><p id="devicesLabel">Server fleet table with resource posture and stale-first sorting.</p></div>
+          <span id="devicesStalePill" class="status-pill warn">-</span>
+        </section>
+        <section class="stat-grid">
+          <article class="stat-card"><span>Servers</span><strong id="devicesServerCount">-</strong><small id="devicesTimeLabel">Updated: -</small></article>
+          <article class="stat-card"><span>Total enrolled</span><strong id="devicesTotalCount">-</strong><small>All device categories</small></article>
+          <article class="stat-card"><span>Clients</span><strong id="devicesClientCount">-</strong><small>Non-server endpoints</small></article>
+          <article class="stat-card"><span>Stale hosts</span><strong id="devicesStaleCountStat" class="critical-text">-</strong><small>Sort to top below</small></article>
+        </section>
+        <nav id="devicesSubNav" class="subnav"></nav>
+        <section class="overview-section">
+          <div class="section-header"><h2>Server inventory</h2></div>
+          <div id="serverCards" class="card-grid"></div>
+        </section>
+      </main>
+      <footer class="page-footer"><span id="errorLabel"></span></footer>
+    </div>
+    <script src="./common.js?v=23"></script>
+    <script src="./devices.js?v=10"></script>
+    <script src="./devices-servers.js?v=10"></script>
+  </body>
+</html>

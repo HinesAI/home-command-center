@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Clear stale HCC lock/pid after unclean shutdown (power loss, kill -9).
+set -euo pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+APP_ROOT="${HCC_TERMINAL_APP_ROOT:-$(cd -- "$SCRIPT_DIR/.." && pwd)}"
+STATE_DIR="${HCC_TERMINAL_STATE_DIR:-$APP_ROOT/var}"
+mkdir -p "$STATE_DIR"
+LOCK="$STATE_DIR/hcc-dashboard.lock"
+PID="$STATE_DIR/hcc-dashboard.pid"
+SCRIPT="$SCRIPT_DIR/hcc-terminal"
+
+dashboard_running() {
+	pgrep -f "$SCRIPT" >/dev/null 2>&1
+}
+
+if dashboard_running; then
+	exit 0
+fi
+
+if [[ -f "$PID" ]]; then
+	stale_pid="$(cat "$PID" 2>/dev/null || true)"
+	if [[ -z "$stale_pid" ]] || ! kill -0 "$stale_pid" 2>/dev/null; then
+		rm -f "$LOCK" "$PID"
+	fi
+else
+	rm -f "$LOCK"
+fi
+
+exit 0

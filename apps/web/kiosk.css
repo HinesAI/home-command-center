@@ -1,0 +1,492 @@
+html.kiosk-mode,
+body.kiosk-mode {
+  height: 100%;
+  overflow: hidden;
+  touch-action: manipulation;
+  -webkit-text-size-adjust: 100%;
+}
+
+.kiosk-shell {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 14px;
+  width: min(1920px, 100%);
+  height: 100vh;
+  height: 100dvh;
+  margin: 0 auto;
+  padding: 18px 22px 12px;
+}
+
+.kiosk-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: end;
+  gap: 18px;
+  min-width: 0;
+}
+
+.kiosk-header-main {
+  min-width: 0;
+}
+
+.kiosk-header-main .brand--ascii {
+  max-width: min(920px, 100%);
+}
+
+.kiosk-header-main .brand-ascii--wide {
+  display: block;
+  font-size: clamp(5px, 0.78vw, 10px);
+}
+
+.kiosk-header-main .brand-ascii--narrow {
+  display: none;
+  font-size: clamp(7px, 1.6vw, 11px);
+}
+
+@media (max-width: 1100px) {
+  .kiosk-header-main .brand-ascii--wide {
+    display: none;
+  }
+
+  .kiosk-header-main .brand-ascii--narrow {
+    display: block;
+  }
+}
+
+.kiosk-title {
+  margin: 0;
+  color: var(--text);
+  font-size: clamp(34px, 3.8vw, 58px);
+  font-weight: 850;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+.kiosk-subtitle {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.kiosk-clock {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  text-align: right;
+}
+
+.kiosk-clock-time {
+  color: var(--text);
+  font-size: clamp(30px, 2.8vw, 48px);
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.kiosk-clock-date {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.kiosk-exit {
+  align-self: start;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 10px 14px;
+  border: 1px solid rgba(155, 176, 204, 0.28);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  touch-action: manipulation;
+}
+
+.kiosk-exit:hover {
+  border-color: var(--interactive-hover-border);
+  color: var(--text);
+  background: var(--interactive-hover-bg);
+}
+
+.kiosk-exit:active {
+  transform: scale(0.97);
+  background: var(--interactive-active-bg);
+}
+
+.kiosk-variant {
+  align-self: start;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 36px;
+  padding: 8px 12px;
+  border: 1px solid rgba(155, 176, 204, 0.2);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  touch-action: manipulation;
+}
+
+.kiosk-variant:hover {
+  border-color: var(--interactive-hover-border);
+  color: var(--text);
+  background: var(--interactive-hover-bg);
+}
+
+.kiosk-variant:active {
+  transform: scale(0.97);
+  background: var(--interactive-active-bg);
+}
+
+.kiosk-header-links {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.kiosk-grid {
+  display: grid;
+  grid-template-columns: minmax(360px, 0.95fr) minmax(520px, 1.25fr);
+  gap: 14px;
+  min-height: 0;
+}
+
+.kiosk-left {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+  min-height: 0;
+}
+
+.kiosk-panel {
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid rgba(29, 42, 60, 0.9);
+  border-radius: var(--radius);
+  background: linear-gradient(180deg, rgba(17, 25, 38, 0.96), rgba(13, 23, 36, 0.96));
+  box-shadow: var(--shadow);
+}
+
+.kiosk-weather {
+  flex: 0 0 auto;
+  padding: 0;
+  overflow: visible;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+.kiosk-weather-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: auto;
+  min-height: 0;
+  padding: 16px 18px 14px;
+}
+
+.kiosk-weather-hero .weather-current {
+  margin-bottom: 0;
+}
+
+.kiosk-weather-hero .weather-icon-wrap {
+  width: 72px;
+  height: 72px;
+}
+
+.kiosk-weather-hero .weather-temp {
+  font-size: clamp(44px, 5vw, 68px);
+}
+
+.kiosk-weather-hero .weather-temp-unit {
+  margin-top: 10px;
+}
+
+.kiosk-weather-current {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+}
+
+.kiosk-weather-stats {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.kiosk-weather-stats .weather-stat {
+  padding: 10px 12px;
+}
+
+.kiosk-weather-stats .weather-stat strong {
+  font-size: clamp(18px, 1.5vw, 22px);
+}
+
+.kiosk-weather-daily-wrap {
+  flex: 0 0 auto;
+}
+
+.kiosk-weather-daily-header {
+  margin-bottom: 8px;
+}
+
+.kiosk-weather-daily {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;
+  align-content: start;
+}
+
+.kiosk-weather-daily .weather-day--compact {
+  min-height: 0;
+  gap: 6px;
+  padding: 8px 6px 10px;
+}
+
+.kiosk-weather-daily .weather-day--compact .weather-day-icon {
+  width: 30px;
+  height: 30px;
+}
+
+.kiosk-weather-daily .weather-day--compact .weather-day-temps {
+  gap: 6px;
+}
+
+.kiosk-weather-daily .weather-day--compact .weather-day-meta {
+  font-size: 11px;
+  gap: 2px;
+}
+
+.kiosk-security {
+  display: flex;
+  flex-direction: column;
+  padding: 16px 18px;
+  overflow: hidden;
+}
+
+.kiosk-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.kiosk-panel-head h2 {
+  margin: 0;
+  font-size: clamp(20px, 1.8vw, 28px);
+}
+
+.kiosk-security-layout {
+  flex: 1;
+  min-height: 0;
+  grid-template-columns: minmax(220px, 0.42fr) minmax(0, 1fr);
+}
+
+.kiosk-door-panel,
+.kiosk-camera-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 12px;
+}
+
+.kiosk-door-panel .door-list,
+.kiosk-camera-panel .kiosk-camera-grid {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+.kiosk-mode .door-row {
+  min-height: 72px;
+  touch-action: manipulation;
+}
+
+.kiosk-mode .camera-tile {
+  touch-action: manipulation;
+}
+
+.kiosk-mode .camera-tile .camera-image {
+  min-height: 140px;
+}
+
+.kiosk-mode .kiosk-automation-card {
+  min-height: 88px;
+  touch-action: manipulation;
+}
+
+.kiosk-mode .kiosk-automation-card:active {
+  transform: scale(0.99);
+  background: rgba(83, 212, 255, 0.06);
+}
+
+@media (hover: none), (pointer: coarse) {
+  .kiosk-mode .camera-tile:active {
+    border-color: var(--interactive-hover-border);
+    box-shadow: 0 0 0 1px rgba(83, 212, 255, 0.2);
+  }
+
+  .kiosk-mode .door-row:active {
+    border-color: rgba(83, 212, 255, 0.35);
+  }
+}
+
+.kiosk-camera-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
+}
+
+.kiosk-automations {
+  flex-shrink: 0;
+  padding: 14px 18px;
+}
+
+.kiosk-automation-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.kiosk-automation-card {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 12px;
+  align-items: center;
+  min-height: 84px;
+  padding: 14px 16px;
+  border: 1px dashed rgba(155, 176, 204, 0.24);
+  border-radius: var(--radius-sm);
+  background: rgba(6, 11, 18, 0.42);
+}
+
+.kiosk-automation-card h3 {
+  margin: 0 0 4px;
+  font-size: 15px;
+}
+
+.kiosk-automation-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.kiosk-automation-grid .climate-card {
+  grid-column: 1 / -1;
+}
+
+.kiosk-automation-grid .climate-step {
+  min-width: 56px;
+  min-height: 56px;
+}
+
+.kiosk-automation-grid .climate-mode-btn,
+.kiosk-automation-grid .climate-fan-btn {
+  min-height: 48px;
+  padding: 0 18px;
+  font-size: 15px;
+}
+
+.kiosk-footer {
+  min-height: 18px;
+  color: var(--bad);
+  font-size: 12px;
+}
+
+/* iPad Pro 12.9" landscape (~1366×1024) and similar tablets */
+@media (min-width: 1024px) and (orientation: landscape) {
+  .kiosk-shell {
+    padding: 16px 20px 10px;
+    gap: 12px;
+  }
+
+  .kiosk-grid {
+    grid-template-columns: minmax(340px, 0.9fr) minmax(480px, 1.2fr);
+    gap: 12px;
+  }
+
+  .kiosk-left {
+    gap: 12px;
+  }
+
+  .kiosk-security-layout {
+    grid-template-columns: minmax(200px, 0.38fr) minmax(0, 1fr);
+  }
+
+  .kiosk-weather-daily .weather-day--compact {
+    padding: 8px 5px 9px;
+  }
+}
+
+/* Phones / narrow portrait only — landscape tablets keep side-by-side */
+@media (max-width: 900px), (max-width: 1024px) and (orientation: portrait) {
+  body.kiosk-mode {
+    overflow: auto;
+  }
+
+  .kiosk-shell {
+    height: auto;
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+
+  .kiosk-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .kiosk-weather-daily {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .kiosk-security-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .kiosk-header {
+    grid-template-columns: 1fr;
+    align-items: flex-start;
+  }
+
+  .kiosk-clock {
+    align-items: flex-start;
+    text-align: left;
+  }
+
+  .kiosk-exit {
+    justify-self: start;
+  }
+}
+
+@media (max-width: 760px) {
+  .kiosk-shell {
+    padding: 14px 14px 10px;
+  }
+
+  .kiosk-weather-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .kiosk-weather-daily {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .kiosk-automation-grid {
+    grid-template-columns: 1fr;
+  }
+}

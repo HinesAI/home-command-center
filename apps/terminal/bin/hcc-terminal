@@ -1,0 +1,1671 @@
+#!/usr/bin/env bash
+# Full-screen console dashboard for the physical monitor (tty1).
+set -uo pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+APP_ROOT="${HCC_TERMINAL_APP_ROOT:-$(cd -- "$SCRIPT_DIR/.." && pwd)}"
+CONFIG_DIR="${HCC_TERMINAL_CONFIG_DIR:-$APP_ROOT/config}"
+# shellcheck source=/dev/null
+[[ -f "$CONFIG_DIR/hcc-terminal.env" ]] && source "$CONFIG_DIR/hcc-terminal.env"
+HCC_PRODUCT_NAME="${HCC_PRODUCT_NAME:-Home Command Center}"
+STATE_DIR="${HCC_TERMINAL_STATE_DIR:-$APP_ROOT/var}"
+ASSET_DIR="${HCC_TERMINAL_ASSET_DIR:-$APP_ROOT/assets}"
+mkdir -p "$STATE_DIR"
+
+STATUS_FILE="${HCC_STATUS_FILE:-$STATE_DIR/hcc-status.json}"
+PREV_SNAPSHOT="${HCC_PREV_SNAPSHOT:-$STATE_DIR/hcc-prev-snapshot.json}"
+BANNER_WIDE="${HCC_BANNER_WIDE:-$STATE_DIR/hcc-banner.txt}"
+BANNER_NARROW="${HCC_BANNER_NARROW:-$STATE_DIR/hcc-banner-narrow.txt}"
+REFRESH_SEC="${HCC_REFRESH_SEC:-120}"
+TTY_DEV="${HCC_TTY_DEV:-/dev/tty1}"
+SIZE_CACHE="${HCC_SIZE_CACHE:-$STATE_DIR/hcc-tty.size}"
+LOCK_FILE="${HCC_LOCK_FILE:-$STATE_DIR/hcc-dashboard.lock}"
+PID_FILE="${HCC_PID_FILE:-$STATE_DIR/hcc-dashboard.pid}"
+# Layout note (wide tty / 27"): content is still centered for the old ~128x48
+# canvas — on 240x67 there is unused side/vertical space. Extend later without
+# rewriting emit_*/center_* until we can preview safely.
+STARTUP_SOUND_FILE="${HCC_STARTUP_SOUND_FILE:-$ASSET_DIR/startup.wav}"
+STARTUP_SOUND_DEVICE="${HCC_STARTUP_SOUND_DEVICE:-plughw:PCH,0}"
+STARTUP_SOUND_RETRIES="${HCC_STARTUP_SOUND_RETRIES:-4}"
+STARTUP_SOUND_RETRY_DELAY="${HCC_STARTUP_SOUND_RETRY_DELAY:-0.35}"
+STARTUP_SOUND_VOLUME="${HCC_STARTUP_SOUND_VOLUME:-100%}"
+STARTUP_STYLE="${HCC_STARTUP_STYLE:-color}" # color | classic
+TOP_PAD="${HCC_TOP_PAD:-2}"
+LOGO_SAFE_COLS="${HCC_LOGO_SAFE_COLS:-2}"
+export TERM=linux
+export TZ="${TZ:-America/Chicago}"
+export LANG="${LANG:-en_US.UTF-8}"
+export LC_CTYPE="${LC_CTYPE:-en_US.UTF-8}"
+
+declare -a BODY=()
+declare -A PREV=()
+LOGO_LINES=0
+WEATHER_LINES=0
+SCREEN_COLS=0
+SCREEN_ROWS=0
+CYCLE_START=0
+
+normalize_tty_dims() {
+	local rows=$1 cols=$2
+	# stty returns "rows cols"; if parsed backwards, cols looks like ~48
+	if (( cols < rows && cols < 80 )); then
+		local tmp=$cols
+		cols=$rows
+		rows=$tmp
+	fi
+	(( cols < 60 )) && cols=60
+	(( rows < 20 )) && rows=20
+	printf '%s %s' "$cols" "$rows"
+}
+
+read_tty_size() {
+	# Lock dimensions after first good read — stops layout jumping between refreshes
+	if (( SCREEN_COLS > 0 && SCREEN_ROWS > 0 )); then
+		printf '%s %s' "$SCREEN_COLS" "$SCREEN_ROWS"
+		return
+	fi
+
+	if [[ -n "${HCC_COLS:-}" && -n "${HCC_ROWS:-}" ]]; then
+		SCREEN_COLS=$HCC_COLS
+		SCREEN_ROWS=$HCC_ROWS
+		printf '%s %s' "$SCREEN_COLS" "$SCREEN_ROWS"
+		return
+	fi
+
+	local raw="" rows=48 cols=128 attempt
+	for attempt in 1 2 3; do
+		if [[ -r "$TTY_DEV" ]]; then
+			raw="$(TERM=linux stty size <"$TTY_DEV" 2>/dev/null)" || true
+		fi
+		if [[ -n "$raw" ]]; then
+			rows="${raw%% *}"
+			cols="${raw##* }"
+			read -r cols rows <<< "$(normalize_tty_dims "$rows" "$cols")"
+			(( cols >= 80 )) && break
+		fi
+		sleep 0.15
+	done
+
+	if (( cols < 80 )) && [[ -f "$SIZE_CACHE" ]]; then
+		read -r cols rows < "$SIZE_CACHE" || true
+	fi
+
+	read -r cols rows <<< "$(normalize_tty_dims "${rows:-48}" "${cols:-128}")"
+	SCREEN_COLS=$cols
+	SCREEN_ROWS=$rows
+	printf '%s %s\n' "$SCREEN_COLS" "$SCREEN_ROWS" > "$SIZE_CACHE"
+	printf '%s %s' "$SCREEN_COLS" "$SCREEN_ROWS"
+}
+
+rpt() {
+	local n=$1 c=$2
+	(( n <= 0 )) && return
+	printf '%*s' "$n" '' | tr ' ' "$c"
+}
+
+strip_ansi() {
+	sed 's/\x1b\[[0-9;]*m//g' <<< "$1"
+}
+
+center_plain() {
+	local s=$1 w=$2
+	local len=${#s}
+	if (( len > w )); then
+		local start=$(( (len - w) / 2 ))
+		s="${s:start:w}"
+		len=$w
+	fi
+	local n=$(( w - len ))
+	local l=$(( n / 2 ))
+	printf '%s%s%s' "$(rpt "$l" ' ')" "$s" "$(rpt "$(( n - l ))" ' ')"
+}
+
+center_ansi() {
+	local s=$1 w=$2
+	local plain len n l
+	plain="$(strip_ansi "$s")"
+	len=${#plain}
+	if (( len > w )); then
+		local start=$(( (len - w) / 2 ))
+		plain="${plain:start:w}"
+		s="$plain"
+		len=$w
+	fi
+	n=$(( w - len ))
+	l=$(( n / 2 ))
+	printf '%s%s%s' "$(rpt "$l" ' ')" "$s" "$(rpt "$(( n - l ))" ' ')"
+}
+
+emit() {
+	printf '%s\n' "$(center_plain "${2:-}" "$1")"
+}
+
+emit_colored() {
+	local cols=$1 color=$2 text=$3
+	printf '%s%s%s\n' "$color" "$(center_plain "$text" "$cols")" "$R"
+}
+
+emit_ansi() {
+	printf '%s\n' "$(center_ansi "$2" "$1")"
+}
+
+panel_width() {
+	local cols=$1
+	local pw=$(( cols * 90 / 100 ))
+	(( pw < 52 )) && pw=$(( cols - 4 ))
+	(( pw > cols - 2 )) && pw=$(( cols - 2 ))
+	echo "$pw"
+}
+
+format_free() {
+	local gb=${1:-0}
+	if (( gb >= 1024 )); then
+		awk -v g="$gb" 'BEGIN { printf "%.1f TB", g/1024 }'
+	else
+		printf '%d GB' "$gb"
+	fi
+}
+
+draw_bar() {
+	local pct=${1:-0} width=${2:-24}
+	local filled=$(( pct * width / 100 ))
+	(( filled > width )) && filled=$width
+	(( filled < 0 )) && filled=0
+	local empty=$(( width - filled ))
+	local bc=$OK
+	(( pct >= 85 )) && bc=$BAD
+	(( pct >= 70 && pct < 85 )) && bc=$WARN
+	printf '%s[' "$bc"
+	printf '%*s' "$filled" '' | tr ' ' '#'
+	printf '%s' "$DIM"
+	printf '%*s' "$empty" '' | tr ' ' '-'
+	printf ']%s' "$R"
+}
+
+badge() {
+	local state=$1
+	case "$state" in
+		running|active|ONLINE|healthy) printf '%s OK %s' "$OK" "$R" ;;
+		starting)                      printf '%s .. %s' "$WARN" "$R" ;;
+		unhealthy)                     printf '%s DN %s' "$BAD" "$R" ;;
+		DEGRADED|FAULTED|UNAVAIL)      printf '%s !! %s' "$WARN" "$R" ;;
+		*)                             printf '%s -- %s' "$BAD" "$R" ;;
+	esac
+}
+
+pct_color() {
+	local pct=${1:-0}
+	if (( pct >= 85 )); then printf '%s' "$BAD"
+	elif (( pct >= 70 )); then printf '%s' "$WARN"
+	else printf '%s' "$OK"
+	fi
+}
+
+load_color() {
+	local val=${1%%.*}
+	val=${val:-0}
+	if (( val >= 4 )); then printf '%s' "$BAD"
+	elif (( val >= 2 )); then printf '%s' "$WARN"
+	else printf '%s' "$OK"
+	fi
+}
+
+latency_color() {
+	local ms=${1:-0}
+	ms=${ms%%.*}
+	if (( ms >= 200 )); then printf '%s' "$BAD"
+	elif (( ms >= 80 )); then printf '%s' "$WARN"
+	else printf '%s' "$OK"
+	fi
+}
+
+patch_color() {
+	local n=${1:-0}
+	if (( n == 0 )); then printf '%s' "$OK"
+	elif (( n <= 10 )); then printf '%s' "$WARN"
+	else printf '%s' "$BAD"
+	fi
+}
+
+os_tag() {
+	case "${1:-}" in
+		win)   printf '%sW%s' "$CYN" "$R" ;;
+		linux) printf '%sL%s' "$OK" "$R" ;;
+		*)     printf '%s·%s' "$MUTED" "$R" ;;
+	esac
+}
+
+format_vm_cell() {
+	local name=$1 status=$2 cpu=$3 mem_gb=$4 os=$5
+	if [[ "$status" == "running" ]]; then
+		printf '%s %-11s %sRUN%s %s%2d%%%s %s%sg%s' \
+			"$(os_tag "$os")" "$(trunc "$name" 11)" "$OK" "$R" \
+			"$(pct_color "$cpu")" "$cpu" "$R" "$MUTED" "$mem_gb" "$R"
+	else
+		printf '%s %-11s %sOFF%s' "$(os_tag "$os")" "$(trunc "$name" 11)" "$BAD" "$R"
+	fi
+}
+
+format_pve_node_line() {
+	local name=$1 cpu=$2 mem=$3 vr=$4 vt=$5 cpu_sp=$6 mem_sp=$7
+	cpu=$(( ${cpu%%.*} + 0 ))
+	mem=$(( ${mem%%.*} + 0 ))
+	vr=$(( ${vr:-0} + 0 ))
+	vt=$(( ${vt:-0} + 0 ))
+	printf '%s%-9s%s CPU %s%2d%%%s%s RAM %s%2d%%%s%s VMs %s%d/%d%s' \
+		"$LABEL" "$name" "$R" "$(pct_color "$cpu")" "$cpu" "$R" "$cpu_sp" \
+		"$(pct_color "$mem")" "$mem" "$R" "$mem_sp" "$CYN" "$vr" "$vt" "$R"
+}
+
+format_cam_line() {
+	local short=$1 fps=$2 det=$3 skipped=$4 enabled=$5
+	local hc
+	hc=$(cam_health_color "$fps" "$skipped" "$enabled")
+	printf '%s%-11s%s %s%2.0ffps%s det %2.0f' \
+		"$hc" "$(trunc "$short" 11)" "$R" "$hc" "$fps" "$R" "$det"
+}
+
+door_state_color() {
+	local state=${1,,}
+	case "$state" in
+		closed|locked|off) printf '%s' "$OK" ;;
+		open|unlocked|on)  printf '%s' "$BAD" ;;
+		*)                 printf '%s' "$WARN" ;;
+	esac
+}
+
+format_door_line() {
+	local name=$1 state=$2
+	local sc
+	sc=$(door_state_color "$state")
+	printf '%s%-14s%s %s%s%s' "$LABEL" "$(trunc "$name" 14)" "$R" "$sc" "${state^^}" "$R"
+}
+
+thermo_action_code() {
+	local action=${1,,}
+	case "$action" in
+		*heating*|*heat*)  printf '%sHEAT%s' "$CYN" "$R" ;;
+		*cooling*|*cool*)  printf '%sCOOL%s' "$CYN" "$R" ;;
+		*idle*)             printf '%sIDLE%s' "$OK" "$R" ;;
+		*off*)              printf '%sOFF%s' "$MUTED" "$R" ;;
+		''|null)            printf '%s--%s' "$MUTED" "$R" ;;
+		*)                  printf '%s%s%s' "$WARN" "${action:0:4}" "$R" ;;
+	esac
+}
+
+format_thermostat_line() {
+	local name=$1 cur=$2 tgt=$3 unit=$4 action=$5 mode=$6 hum_cur=$7 hum_tgt=$8
+	local cur_s tgt_s unit_s act hum_part
+
+	unit_s="$unit"
+	[[ "$unit_s" == "null" ]] && unit_s=""
+
+	if [[ -z "${cur:-}" || "$cur" == "null" ]]; then
+		cur_s="?"
+	else
+		cur_s="${cur}${unit_s}"
+	fi
+
+	if [[ -z "${tgt:-}" || "$tgt" == "null" ]]; then
+		tgt_s="?"
+	else
+		tgt_s="${tgt}${unit_s}"
+	fi
+
+	act="$(thermo_action_code "$action")"
+
+	hum_part=""
+	if [[ -n "${hum_cur:-}" && "$hum_cur" != "null" && -n "${hum_tgt:-}" && "$hum_tgt" != "null" ]]; then
+		hum_part=" H${hum_cur}%->${hum_tgt}%"
+	elif [[ -n "${hum_cur:-}" && "$hum_cur" != "null" ]]; then
+		hum_part=" H${hum_cur}%"
+	fi
+
+	printf '%s%-14s%s %s%s%s->%s%s%s %s%s%s' \
+		"$LABEL" "$(trunc "$name" 16)" "$R" \
+		"$CYN" "$cur_s" "$R" \
+		"$CYN" "$tgt_s" "$R" \
+		"$act" "$MUTED" "$(trunc "$mode$hum_part" 16)$R"
+}
+
+col_half_width() {
+	local cols=$1
+	echo $(( cols / 2 - 1 ))
+}
+
+pad_plain_to() {
+	local text=$1 width=$2
+	local plain len pad
+	plain="$(strip_ansi "$text")"
+	len=${#plain}
+	(( len >= width )) && { printf '%s' "$text"; return; }
+	pad=$(( width - len ))
+	printf '%s%s' "$text" "$(rpt "$pad" ' ')"
+}
+
+emit_col_pair() {
+	local cols=$1 left=$2 right=$3
+	local half lp rp
+	half=$(col_half_width "$cols")
+	lp="$(strip_ansi "$left")"
+	rp="$(strip_ansi "$right")"
+	(( ${#lp} > half )) && left="${lp:0:half}"
+	(( ${#rp} > half )) && right="${rp:0:half}"
+	lp="$(strip_ansi "$left")"
+	printf '%s  %s\n' "$(pad_plain_to "$left" "$half")" "$right"
+}
+
+emit_sec2() {
+	local cols=$1 left=$2 right=$3
+	local half
+	half=$(col_half_width "$cols")
+	emit_col_pair "$cols" "${BOLD}${ACCENT}${left}${R}" "${BOLD}${ACCENT}${right}${R}"
+	emit_col_pair "$cols" "$(rpt "$half" '-')" "$(rpt "$half" '-')"
+}
+
+box_inner_width() {
+	local cols=$1
+	echo $(( (cols - 7) / 2 ))
+}
+
+box_quad_cell_width() {
+	local cols=$1
+	# │ c1 │ c2 │ c3 │ c4 │  => 13 chars overhead
+	echo $(( (cols - 13) / 4 ))
+}
+
+emit_box_row_quad() {
+	local cols=$1 c1=$2 c2=$3 c3=$4 c4=$5
+	local cw lp1 lp2 lp3 lp4
+	cw=$(box_quad_cell_width "$cols")
+	lp1="$(strip_ansi "$c1")"; lp2="$(strip_ansi "$c2")"
+	lp3="$(strip_ansi "$c3")"; lp4="$(strip_ansi "$c4")"
+	(( ${#lp1} > cw )) && c1="${lp1:0:cw}"
+	(( ${#lp2} > cw )) && c2="${lp2:0:cw}"
+	(( ${#lp3} > cw )) && c3="${lp3:0:cw}"
+	(( ${#lp4} > cw )) && c4="${lp4:0:cw}"
+	lp1="$(strip_ansi "$c1")"; lp2="$(strip_ansi "$c2")"
+	lp3="$(strip_ansi "$c3")"; lp4="$(strip_ansi "$c4")"
+	printf '%s│ %s%s │ %s%s │ %s%s │ %s%s │%s\n' \
+		"$LINE" "$c1" "$(rpt $(( cw - ${#lp1} )) ' ')" \
+		"$c2" "$(rpt $(( cw - ${#lp2} )) ' ')" \
+		"$c3" "$(rpt $(( cw - ${#lp3} )) ' ')" \
+		"$c4" "$(rpt $(( cw - ${#lp4} )) ' ')" "$R"
+}
+
+# Dual box: left half = 2-col grid, right half = 2-col grid.
+append_dual_quad_box() {
+	local left_title=$1 right_title=$2 left_name=$3 right_name=$4
+	local -n _dql="$left_name"
+	local -n _dqr="$right_name"
+	local i rows li ri l1 l2 r1 r2
+	rows=${#_dql[@]}
+	(( ${#_dqr[@]} > rows )) && rows=${#_dqr[@]}
+	rows=$(( (rows + 1) / 2 ))
+	(( rows < 1 )) && rows=1
+	BODY+=("BOXTOP:${left_title}|${right_title}")
+	for (( i=0; i<rows; i++ )); do
+		li=$(( i * 2 )); ri=$(( i * 2 ))
+		l1="${_dql[li]:-}"; l2="${_dql[li+1]:-}"
+		r1="${_dqr[ri]:-}"; r2="${_dqr[ri+1]:-}"
+		BODY+=("BOX4ROW:${l1}|${l2}|${r1}|${r2}")
+	done
+	BODY+=("BOXBOT:")
+}
+
+emit_box_top() {
+	local cols=$1 left=$2 right=$3
+	local iw lfill rfill
+	iw=$(box_inner_width "$cols")
+	lfill=$(( iw - ${#left} - 3 ))
+	rfill=$(( iw - ${#right} - 3 ))
+	(( lfill < 0 )) && lfill=0
+	(( rfill < 0 )) && rfill=0
+	printf '%s┌─ %s%s┬─ %s%s┐%s\n' \
+		"$LINE" "$left" "$(rpt "$lfill" '─')" \
+		"$right" "$(rpt "$rfill" '─')" "$R"
+}
+
+emit_box_row() {
+	local cols=$1 left=$2 right=$3
+	local iw lp rp
+	iw=$(box_inner_width "$cols")
+	lp="$(strip_ansi "$left")"
+	rp="$(strip_ansi "$right")"
+	(( ${#lp} > iw )) && left="${lp:0:iw}"
+	(( ${#rp} > iw )) && right="${rp:0:iw}"
+	lp="$(strip_ansi "$left")"
+	rp="$(strip_ansi "$right")"
+	printf '%s│ %s%s │ %s%s │%s\n' \
+		"$LINE" "$left" "$(rpt $(( iw - ${#lp} )) ' ')" \
+		"$right" "$(rpt $(( iw - ${#rp} )) ' ')" "$R"
+}
+
+emit_box_bottom() {
+	local cols=$1
+	local iw
+	iw=$(box_inner_width "$cols")
+	printf '%s└%s┴%s┘%s\n' "$LINE" "$(rpt "$iw" '─')" "$(rpt "$iw" '─')" "$R"
+}
+
+# Full-width box with two equal columns (uses full row — no wasted right padding).
+emit_grid_box_top() {
+	local cols=$1 title=$2
+	local fill
+	fill=$(( cols - 5 - ${#title} ))
+	(( fill < 0 )) && fill=0
+	printf '%s┌─ %s%s┐%s\n' "$LINE" "$title" "$(rpt "$fill" '─')" "$R"
+}
+
+emit_grid_box_row() {
+	local cols=$1 c1=$2 c2=$3
+	local iw lp1 lp2
+	iw=$(box_inner_width "$cols")
+	lp1="$(strip_ansi "$c1")"
+	lp2="$(strip_ansi "$c2")"
+	(( ${#lp1} > iw )) && c1="${lp1:0:iw}"
+	(( ${#lp2} > iw )) && c2="${lp2:0:iw}"
+	lp1="$(strip_ansi "$c1")"
+	lp2="$(strip_ansi "$c2")"
+	printf '%s│ %s%s │ %s%s │%s\n' \
+		"$LINE" "$c1" "$(rpt $(( iw - ${#lp1} )) ' ')" \
+		"$c2" "$(rpt $(( iw - ${#lp2} )) ' ')" "$R"
+}
+
+emit_grid_box_row_full() {
+	local cols=$1 text=$2
+	local iw span lp
+	iw=$(box_inner_width "$cols")
+	span=$(( iw * 2 + 3 ))
+	lp="$(strip_ansi "$text")"
+	(( ${#lp} > span )) && text="${lp:0:span}"
+	lp="$(strip_ansi "$text")"
+	printf '%s│ %s%s │%s\n' "$LINE" "$text" "$(rpt $(( span - ${#lp} )) ' ')" "$R"
+}
+
+emit_grid_box_bottom() {
+	local cols=$1
+	local iw=$(( cols - 4 ))
+	printf '%s└%s┘%s\n' "$LINE" "$(rpt "$iw" '─')" "$R"
+}
+
+# Pack an array into a full-width 2-column grid box.
+append_grid_box() {
+	local title=$1 arr_name=$2
+	local -n _grid_items="$arr_name"
+	local i n=${#_grid_items[@]} rows idx c1 c2
+	(( n == 0 )) && _grid_items+=("")
+	BODY+=("GRIDTOP:${title}")
+	rows=$(( (n + 1) / 2 ))
+	for (( i=0; i<rows; i++ )); do
+		idx=$(( i * 2 ))
+		c1="${_grid_items[idx]:-}"
+		c2="${_grid_items[idx+1]:-}"
+		BODY+=("GRIDROW:${c1}|${c2}")
+	done
+	BODY+=("GRIDBOT:")
+}
+
+# Pack two column arrays into a dual box (BOXTOP/BOXROW/BOXBOT).
+format_vlan_cell() {
+	local vvlan=$1 vname=$2 vsub=$3
+	printf '%sVLAN %s%-4s%s %s%s%s %s%s%s' \
+		"$MUTED" "$CYN" "$vvlan" "$R" \
+		"$LABEL" "$vname" "$R" \
+		"$MUTED" "${vsub:-—}" "$R"
+}
+
+format_ping_cell() {
+	local pdisp=$1 ptarget=$2 pok=$3 plat=$4
+	if [[ "$pok" == "true" ]]; then
+		printf '%s%s%s %sOK%s %s%5.1fms%s %s%s%s' \
+			"$LABEL" "$pdisp" "$R" \
+			"$OK" "$R" \
+			"$(latency_color "${plat:-0}")" "${plat:-0}" "$R" \
+			"$MUTED" "$ptarget" "$R"
+	else
+		printf '%s%s%s %sDN%s %s%s%s' \
+			"$LABEL" "$pdisp" "$R" \
+			"$BAD" "$R" \
+			"$MUTED" "$ptarget" "$R"
+	fi
+}
+
+append_dual_box() {
+	local left_title=$1 right_title=$2 left_name=$3 right_name=$4
+	local -n _abl="$left_name"
+	local -n _abr="$right_name"
+	local i max=${#_abl[@]}
+	(( ${#_abr[@]} > max )) && max=${#_abr[@]}
+	(( max < 1 )) && max=1
+	BODY+=("BOXTOP:${left_title}|${right_title}")
+	for (( i=0; i<max; i++ )); do
+		BODY+=("BOXROW:${_abl[i]:-}|${_abr[i]:-}")
+	done
+	BODY+=("BOXBOT:")
+}
+
+sparkline() {
+	local series=$1
+	local -a vals=()
+	local v idx out="" ch
+	local chars=(▁ ▂ ▃ ▄ ▅ ▆ ▇ █)
+	[[ -z "$series" || "$series" == "null" ]] && return
+	read -ra vals <<< "${series//,/ }"
+	for v in "${vals[@]}"; do
+		v=${v%%.*}
+		v=${v:-0}
+		idx=$(( v * 7 / 100 ))
+		(( idx > 7 )) && idx=7
+		(( idx < 0 )) && idx=0
+		ch="${chars[idx]}"
+		out+="${ch}"
+	done
+	[[ -n "$out" ]] && printf ' %s%s%s' "$MUTED" "$out" "$R"
+}
+
+load_prev_snapshot() {
+	PREV=()
+	[[ -f "$PREV_SNAPSHOT" ]] || return 0
+	while IFS='=' read -r k v; do
+		[[ -n "$k" ]] && PREV[$k]=$v
+	done < <(jq -r 'to_entries[]? | "\(.key)=\(.value)"' "$PREV_SNAPSHOT" 2>/dev/null)
+}
+
+value_changed() {
+	local key=$1 val=$2
+	[[ -n "${PREV[$key]:-}" && "${PREV[$key]}" != "$val" ]]
+}
+
+wrap_if_changed() {
+	local key=$1 val=$2 text=$3
+	if value_changed "$key" "$val"; then
+		printf '%s%s%s' "$HI" "$text" "$R"
+	else
+		printf '%s' "$text"
+	fi
+}
+
+save_snapshot() {
+	local data=$1
+	jq -n \
+		--argjson doors "$(jq '[.homeassistant.doors[]? | {key: ("door:" + .name), value: .state}]' <<< "$data")" \
+		--argjson thermostats "$(jq '[.homeassistant.thermostats[]? | {key: ("thermo:" + .name), value: "\((.current_temp // "")|tostring)|\((.target_temp // "")|tostring)|\(.unit // "")|\(.hvac_action // "")|\(.hvac_mode // "")|\((.current_humidity // "")|tostring)|\((.target_humidity // "")|tostring)"}]' <<< "$data")" \
+		--argjson vms "$(jq '[.workloads[]? | {key: ("vm:" + .name), value: .status}]' <<< "$data")" \
+		--argjson pools "$(jq '[.storage.pools[]? | {key: ("pool:" + .name), value: .health}]' <<< "$data")" \
+		'[.doors[], .thermostats[], .vms[], .pools[]] | map({(.key): .value}) | add // {}' \
+		> "${PREV_SNAPSHOT}.tmp" 2>/dev/null && mv "${PREV_SNAPSHOT}.tmp" "$PREV_SNAPSHOT"
+}
+
+build_alert_line() {
+	local data=$1
+	local -a parts=()
+	local pname phealth dname dstate
+
+	while IFS=$'\t' read -r pname phealth; do
+		[[ "$phealth" == "ONLINE" ]] && continue
+		parts+=("$(printf '%sZFS %s %s%s%s' "$BAD" "$pname" "$WARN" "$phealth" "$R")")
+	done < <(jq -r '.storage.pools[]? | [.name, .health] | @tsv' <<< "$data")
+
+	while IFS=$'\t' read -r dname dstate; do
+		[[ "${dstate,,}" != "open" ]] && continue
+		parts+=("$(printf '%sDOOR OPEN: %s%s' "$BAD" "$dname" "$R")")
+	done < <(jq -r '.homeassistant.doors[]? | [.name, .state] | @tsv' <<< "$data")
+
+	local gstate
+	gstate=$(jq -r '.services[]? | select(.name == "gluetun") | .state // empty' <<< "$data")
+	case "$gstate" in
+		healthy|""|missing|stopped) ;;
+		starting)
+			parts+=("$(printf '%sVPN connecting…%s' "$WARN" "$R")")
+			;;
+		unhealthy|running)
+			parts+=("$(printf '%sVPN down — check gluetun / PIA creds%s' "$WARN" "$R")")
+			;;
+	esac
+
+	if (( ${#parts[@]} == 0 )); then
+		printf '%s● ALL CLEAR — no open doors or degraded pools%s' "$OK" "$R"
+	else
+		local joined=""
+		for p in "${parts[@]}"; do joined+="$p  "; done
+		printf '%s▲ %s%s' "$BAD" "$(trunc "$(strip_ansi "$joined")" 110)" "$R"
+	fi
+}
+
+format_footer() {
+	local data=$1 ip=$2
+	local now remain mins secs clock
+	now=$(date +%s)
+	remain=$(( REFRESH_SEC - (now - CYCLE_START) ))
+	(( remain < 0 )) && remain=0
+	mins=$(( remain / 60 ))
+	secs=$(( remain % 60 ))
+	clock=$(date '+%a %b %d %I:%M %p')
+	printf '%s%s%s  ·  next refresh %d:%02d  ·  %s  ·  Ctrl+Alt+F2 shell' \
+		"$MUTED" "$clock" "$R" "$mins" "$secs" "$ip"
+}
+
+cam_health_color() {
+	local fps=$1 skipped=$2 enabled=$3
+	fps=${fps%%.*}
+	skipped=${skipped%%.*}
+	fps=${fps:-0}
+	skipped=${skipped:-0}
+	[[ "$enabled" != "true" && "$enabled" != "1" ]] && { printf '%s' "$BAD"; return; }
+	(( fps == 0 )) && { printf '%s' "$BAD"; return; }
+	(( skipped >= 2 )) && { printf '%s' "$WARN"; return; }
+	printf '%s' "$OK"
+}
+
+format_cam_cell() {
+	local short=$1 fps=$2 det=$3 skipped=$4 enabled=$5
+	local hc
+	hc=$(cam_health_color "$fps" "$skipped" "$enabled")
+	printf '%s%-10s%s %s%2.0ffps%s det%2.0f' \
+		"$hc" "$(trunc "$short" 10)" "$R" "$hc" "$fps" "$R" "$det"
+}
+
+trunc() {
+	local s=$1 max=$2
+	(( ${#s} <= max )) && { printf '%s' "$s"; return; }
+	printf '%s…' "${s:0:$(( max - 1 ))}"
+}
+
+# Stats use standard 16-color ANSI (linux tty); logo color unchanged
+init_theme() {
+	R=$'\033[0m'
+	DIM=$'\033[2m'
+	BOLD=$'\033[1m'
+	LOGO=$'\033[38;5;28m'   # dark retro phosphor green (logo only)
+	ACCENT=$'\033[1;36m'
+	LABEL=$'\033[1;37m'
+	MUTED=$'\033[90m'
+	OK=$'\033[32m'
+	WARN=$'\033[33m'
+	BAD=$'\033[31m'
+	LINE=$'\033[90m'
+	CYN=$'\033[36m'
+	HI=$'\033[7m'   # reverse video for changed values (one refresh)
+}
+
+init_theme
+
+load_banner() {
+	local cols=$1
+	local -a lines=()
+	local fb="$BANNER_WIDE"
+	(( cols < 100 )) && [[ -f "$BANNER_NARROW" ]] && fb="$BANNER_NARROW"
+
+	if [[ -f "$fb" ]]; then
+		while IFS= read -r line; do
+			[[ -z "$line" ]] && continue
+			lines+=("$line")
+		done < "$fb"
+	fi
+
+	if (( ${#lines[@]} == 0 )); then
+		lines=("$HCC_PRODUCT_NAME")
+	fi
+	printf '%s\n' "${lines[@]}"
+}
+
+# Shrink middle whitespace to fit — never crop letter edges
+fit_line_to_width() {
+	local line=$1 width=$2
+	line="${line%"${line##*[![:space:]]}"}"  # rtrim
+	(( ${#line} <= width )) && { printf '%s' "$line"; return; }
+
+	local excess=$(( ${#line} - width ))
+	local best_start=0 best_len=0 i=0 line_len=${#line}
+	while (( i < line_len )); do
+		if [[ "${line:i:1}" == ' ' ]]; then
+			local j=$i
+			while (( j < line_len )) && [[ "${line:j:1}" == ' ' ]]; do
+				j=$(( j + 1 ))
+			done
+			local run=$(( j - i ))
+			if (( run > best_len && i > 5 && j < line_len - 5 )); then
+				best_len=$run
+				best_start=$i
+			fi
+			i=$j
+		else
+			i=$(( i + 1 ))
+		fi
+	done
+	if (( best_len >= excess )); then
+		printf '%s' "${line:0:best_start}${line:best_start + excess}"
+	else
+		printf '%s' "${line:0:width}"
+	fi
+}
+
+print_logo() {
+	local cols=$1
+	local -a lines=()
+	local top_pad=$TOP_PAD p=0
+
+	while (( p < top_pad )); do
+		printf '\n'
+		p=$(( p + 1 ))
+	done
+
+	while IFS= read -r line; do
+		[[ -z "$line" ]] && continue
+		lines+=("$line")
+	done < <(load_banner "$cols")
+
+	local max_w=0 l fitted logo_w
+	logo_w=$(( cols - LOGO_SAFE_COLS ))
+	(( logo_w < 80 )) && logo_w=$(( cols - 2 ))
+	for i in "${!lines[@]}"; do
+		# Banner is pre-aligned in hcc-banner.txt — only shrink if wider than screen
+		if (( ${#lines[i]} <= logo_w )); then
+			fitted="${lines[i]}"
+		else
+			fitted="$(fit_line_to_width "${lines[i]}" "$logo_w")"
+		fi
+		lines[i]="$fitted"
+		(( ${#fitted} > max_w )) && max_w=${#fitted}
+	done
+
+	local margin=$(( (cols - max_w) / 2 ))
+	for l in "${lines[@]}"; do
+		printf '%s%s%s\n' "$LOGO" "$(rpt "$margin" ' ')${l}" "$R"
+	done
+	LOGO_LINES=$(( ${#lines[@]} + top_pad ))
+}
+
+weather_cond_short() {
+	case "${1,,}" in
+		clear|sunny) echo "Sunny" ;;
+		partlycloudy|partly-cloudy*) echo "Partly" ;;
+		cloudy) echo "Cloudy" ;;
+		rainy|pouring|rain) echo "Rain" ;;
+		lightning|lightning-rainy|thunder*) echo "Storms" ;;
+		snowy|snowy-rainy|snow) echo "Snow" ;;
+		fog|foggy) echo "Fog" ;;
+		windy|windy-variant) echo "Windy" ;;
+		hail) echo "Hail" ;;
+		exceptional) echo "Alert" ;;
+		*) echo "$(trunc "${1:-?}" 8)" ;;
+	esac
+}
+
+weather_day_label() {
+	local dt=$1
+	# HA datetimes are ISO8601; date -d works on GNU date.
+	date -d "$dt" '+%a' 2>/dev/null || echo "Day"
+}
+
+print_weather_strip() {
+	# Large 7-day (or fewer) forecast under the logo. Sets WEATHER_LINES.
+	local cols=$1 data=$2
+	WEATHER_LINES=0
+	[[ "${HCC_SHOW_WEATHER:-1}" == "1" ]] || return 0
+	if ! echo "$data" | jq -e '.weather.ok == true and ((.weather.forecast|length) > 0)' >/dev/null 2>&1; then
+		return 0
+	fi
+
+	local -a days=() highs=() lows=() conds=() metas=()
+	local n unit day_w i margin total_w
+	unit=$(jq -r '.weather.unit // "F"' <<< "$data")
+	n=$(jq -r '.weather.forecast | length' <<< "$data")
+	(( n > 7 )) && n=7
+	(( n < 1 )) && return 0
+
+	# Tighter day columns, center the whole strip on the screen.
+	day_w=$(( (cols * 68 / 100) / n ))
+	(( day_w > 22 )) && day_w=22
+	(( day_w < 14 )) && day_w=14
+	total_w=$(( day_w * n ))
+	margin=$(( (cols - total_w) / 2 ))
+	(( margin < 0 )) && margin=0
+
+	weather_cell() {
+		# Center text inside a fixed day column.
+		local w=$1 text=$2 pad left right
+		(( ${#text} > w )) && text="${text:0:w}"
+		pad=$(( w - ${#text} ))
+		left=$(( pad / 2 ))
+		right=$(( pad - left ))
+		printf '%*s%s%*s' "$left" '' "$text" "$right" ''
+	}
+
+	while IFS=$'\t' read -r dt cond hi lo hum wind; do
+		days+=("$(weather_day_label "$dt")")
+		highs+=("${hi:-?}")
+		lows+=("${lo:-?}")
+		conds+=("$(weather_cond_short "$cond")")
+		metas+=("H${hum:-?}% ${wind:-?}mph")
+	done < <(jq -r --argjson n "$n" '
+		.weather.forecast[0:$n][] |
+		[
+			.datetime,
+			.condition,
+			(.high // "?"),
+			(.low // "?"),
+			(.humidity // "?"),
+			((.wind_speed // 0) | floor)
+		] | @tsv
+	' <<< "$data")
+
+	printf '\n'
+	WEATHER_LINES=$(( WEATHER_LINES + 1 ))
+
+	# Day names
+	printf '%s' "$(rpt "$margin" ' ')$BOLD$ACCENT"
+	for (( i=0; i<n; i++ )); do weather_cell "$day_w" "${days[i]}"; done
+	printf '%s\n' "$R"
+	WEATHER_LINES=$(( WEATHER_LINES + 1 ))
+
+	# High / low
+	printf '%s' "$(rpt "$margin" ' ')$CYN"
+	for (( i=0; i<n; i++ )); do weather_cell "$day_w" "${highs[i]}°/${lows[i]}°"; done
+	printf '%s\n' "$R"
+	WEATHER_LINES=$(( WEATHER_LINES + 1 ))
+
+	# Condition
+	printf '%s' "$(rpt "$margin" ' ')$LABEL"
+	for (( i=0; i<n; i++ )); do weather_cell "$day_w" "${conds[i]}"; done
+	printf '%s\n' "$R"
+	WEATHER_LINES=$(( WEATHER_LINES + 1 ))
+
+	# Humidity / wind
+	printf '%s' "$(rpt "$margin" ' ')$MUTED"
+	for (( i=0; i<n; i++ )); do weather_cell "$day_w" "${metas[i]}"; done
+	printf '%s\n' "$R"
+	WEATHER_LINES=$(( WEATHER_LINES + 1 ))
+
+	# Now line (current conditions) — centered under the strip
+	local now_c now_t now_h now_line
+	now_c=$(jq -r '.weather.condition // ""' <<< "$data")
+	now_t=$(jq -r '.weather.temperature // "?"' <<< "$data")
+	now_h=$(jq -r '.weather.humidity // "?"' <<< "$data")
+	now_line=$(printf 'Now %s %s°%s  Hum %s%%' "$(weather_cond_short "$now_c")" "$now_t" "$unit" "$now_h")
+	emit_colored "$cols" "$MUTED" "$now_line"
+	WEATHER_LINES=$(( WEATHER_LINES + 1 ))
+}
+
+primary_ip() {
+	jq -r '.ips[]? | select(test("^eno|^eth|^enp|^bond")) | split(": ")[1] | split("/")[0]' <<< "$1" 2>/dev/null | head -1
+}
+
+build_body() {
+	local data=$1 cols=$2 pw=$3 rows=$4
+	BODY=()
+	load_prev_snapshot
+	local ha_doors_start=-1
+
+	local bar_w=$(( pw - 34 ))
+	(( bar_w < 10 )) && bar_w=10
+	(( bar_w > 36 )) && bar_w=36
+
+	local host uptime load mem ip updated os_name os_ver kernel patches sec_patches
+	host=$(jq -r '.hostname' <<< "$data")
+	uptime=$(jq -r '.uptime' <<< "$data")
+	load=$(jq -r '.load' <<< "$data" | awk -F, '{print $1}')
+	mem=$(jq -r '.memory' <<< "$data")
+	ip=$(primary_ip "$data")
+	[[ -z "$ip" ]] && ip=$(jq -r '.ips[0]? // ""' <<< "$data" | sed 's/.*: //;s/\/.*//')
+	updated=$(jq -r '.updated' <<< "$data")
+	os_name=$(jq -r '.os.name // "Linux"' <<< "$data")
+	os_ver=$(jq -r '.os.version // ""' <<< "$data")
+	kernel=$(jq -r '.kernel // ""' <<< "$data")
+	patches=$(jq -r '.patches.pending // 0' <<< "$data")
+	sec_patches=$(jq -r '.patches.security // 0' <<< "$data")
+
+	BODY+=("ALERT:$(build_alert_line "$data")")
+	BODY+=("SEC:SYSTEM")
+	BODY+=("ROW:$(printf '%s%s%s %s%s%s  %sup %s%s  load %s%s%s  %s%s%s' \
+		"$LABEL" "${host^^}" "$R" "$CYN" "$(trunc "$os_name" 28)" "$R" \
+		"$MUTED" "$uptime" "$R" "$(load_color "$load")" "$load" "$R" "$MUTED" "$(trunc "$mem" 32)" "$R")")
+	BODY+=("ROW:$(printf '%skernel %s%s%s  ·  %s%s updates pending%s  ·  %s%s security%s' \
+		"$MUTED" "$kernel" "$R" "$(patch_color "$patches")" "$patches" "$R" \
+		"$(patch_color "$sec_patches")" "$sec_patches" "$R")")
+
+	BODY+=("GAP")
+	BODY+=("SEC:STORAGE")
+	while IFS=$'\t' read -r name health pct free_gb; do
+		pct=${pct:-0}
+		local free bar pc badge_txt row
+		free=$(format_free "$free_gb")
+		bar=$(draw_bar "$pct" "$bar_w")
+		pc=$(pct_color "$pct")
+		badge_txt="$(badge "$health")"
+		row=$(printf '%s%-14s%s %s  %s %s%3d%%%s  %s%s%s' \
+			"$LABEL" "$name" "$R" "$badge_txt" "$bar" "$pc" "$pct" "$R" "$MUTED" "$free" "$R")
+		BODY+=("ROW:$(wrap_if_changed "pool:${name}" "$health" "$row")")
+	done < <(jq -r '.storage.pools[]? | [.name, .health, (.used_pct // 0), (.free_gb // 0)] | @tsv' <<< "$data")
+
+	BODY+=("GAP")
+	BODY+=("SEC:SERVICES")
+	local -a svc=() watch_file="${CONFIG_DIR}/hcc-docker.watch"
+	local watch_json
+	if [[ -f "$watch_file" ]]; then
+		watch_json="$(grep -vE '^\s*($|#)' "$watch_file" | jq -R -s 'split("\n") | map(select(length>0))')"
+	else
+		watch_json='["jellyfin","gluetun","qbittorrent"]'
+	fi
+	while IFS=$'\t' read -r name state; do
+		svc+=("$(printf '%s%-12s%s %s' "$LABEL" "$name" "$R" "$(badge "$state")")")
+	done < <(jq -r --argjson watch "$watch_json" '
+		.services
+		| map(select(.name as $n | ($watch | index($n)) != null))
+		| sort_by(.name)
+		| .[] | [.name, .state] | @tsv
+	' <<< "$data")
+	while IFS= read -r name; do
+		[[ -z "$name" ]] && continue
+		jq -e --arg n "$name" '.services[]? | select(.name == $n)' <<< "$data" >/dev/null 2>&1 && continue
+		svc+=("$(printf '%s%-12s%s %s' "$LABEL" "$name" "$R" "$(badge "stopped")")")
+	done < <(jq -r '.[]' <<< "$watch_json")
+	while IFS=$'\t' read -r name state; do
+		[[ "$name" == "smbd" || "$name" == "winbind" || "$name" == "docker" ]] || continue
+		jq -e --arg n "$name" '.services[]? | select(.name == $n)' <<< "$data" >/dev/null 2>&1 && continue
+		svc+=("$(printf '%s%-12s%s %s' "$LABEL" "$name" "$R" "$(badge "$state")")")
+	done < <(jq -r '
+		.services
+		| map(select(.name == "smbd" or .name == "winbind" or .name == "docker"))
+		| sort_by(if .name == "smbd" then 0 elif .name == "winbind" then 1 else 2 end)
+		| .[] | [.name, .state] | @tsv
+	' <<< "$data")
+
+	local half=$(( (pw / 2) - 1 ))
+	(( half < 18 )) && half=18
+	local i=0
+	while (( i < ${#svc[@]} )); do
+		if (( i + 1 < ${#svc[@]} )); then
+			BODY+=("ROW:$(printf '%-*s  %s' "$half" "${svc[i]}" "${svc[i+1]}")")
+			i=$(( i + 2 ))
+		else
+			BODY+=("ROW:${svc[i]}")
+			i=$(( i + 1 ))
+		fi
+	done
+	BODY+=("GAP")
+	BODY+=("SEC:NETWORK")
+
+	local ni_iface ni_ip ni_cidr ni_state ni_speed ni_duplex ni_mtu
+	local ni_gw ni_gw_mac ni_fqdn ni_pub
+	local ni_rx ni_tx ni_rxe ni_txe ni_rxd ni_txd ni_tcp
+	local ni_dns ni_vpn ni_vpn_state
+	ni_iface=$(jq -r '.netinfo.iface // ""' <<< "$data")
+	ni_ip=$(jq -r '.netinfo.ip // ""' <<< "$data")
+	ni_cidr=$(jq -r '.netinfo.cidr // ""' <<< "$data")
+	ni_state=$(jq -r '.netinfo.state // "?"' <<< "$data")
+	ni_speed=$(jq -r '.netinfo.speed_mbps // "?"' <<< "$data")
+	ni_duplex=$(jq -r '.netinfo.duplex // ""' <<< "$data")
+	ni_mtu=$(jq -r '.netinfo.mtu // "?"' <<< "$data")
+	ni_gw=$(jq -r '.netinfo.gateway // ""' <<< "$data")
+	ni_gw_mac=$(jq -r '.netinfo.gateway_mac // ""' <<< "$data")
+	ni_fqdn=$(jq -r '.netinfo.fqdn // ""' <<< "$data")
+	ni_pub=$(jq -r '.netinfo.public_ip // ""' <<< "$data")
+	ni_rx=$(jq -r '.netinfo.rx_gb // 0' <<< "$data")
+	ni_tx=$(jq -r '.netinfo.tx_gb // 0' <<< "$data")
+	ni_rxe=$(jq -r '.netinfo.rx_errors // 0' <<< "$data")
+	ni_txe=$(jq -r '.netinfo.tx_errors // 0' <<< "$data")
+	ni_rxd=$(jq -r '.netinfo.rx_dropped // 0' <<< "$data")
+	ni_txd=$(jq -r '.netinfo.tx_dropped // 0' <<< "$data")
+	ni_tcp=$(jq -r '.netinfo.tcp_estab // 0' <<< "$data")
+	ni_dns=$(jq -r '.netinfo.dns_ok // false' <<< "$data")
+	ni_vpn=$(jq -r '.netinfo.vpn.name // "gluetun"' <<< "$data")
+	ni_vpn_state=$(jq -r '.netinfo.vpn.state // "?"' <<< "$data")
+
+	local dns_badge vpn_badge link_badge err_badge duplex_s
+	if [[ "$ni_dns" == "true" ]]; then dns_badge="${OK}OK${R}"; else dns_badge="${BAD}DN${R}"; fi
+	case "$ni_vpn_state" in
+		healthy|running|active) vpn_badge="${OK}OK${R}" ;;
+		starting) vpn_badge="${WARN}..${R}" ;;
+		missing|stopped|"") vpn_badge="${MUTED}--${R}" ;;
+		*) vpn_badge="${WARN}${ni_vpn_state}${R}" ;;
+	esac
+	case "$ni_state" in
+		up) link_badge="${OK}up${R}" ;;
+		*) link_badge="${BAD}${ni_state}${R}" ;;
+	esac
+	duplex_s="${ni_duplex:-?}"
+	if (( ni_rxe + ni_txe + ni_rxd + ni_txd > 0 )); then
+		err_badge="${WARN}err ${ni_rxe}/${ni_txe}  drop ${ni_rxd}/${ni_txd}${R}"
+	else
+		err_badge="${OK}err 0  drop 0${R}"
+	fi
+
+	# --- Box 1: LINK | DNS / GATEWAY ---
+	local -a net_link=() net_dns=()
+	net_link+=("$(printf '%s%s%s  link %s  %s%s%s Mbps %s%s%s  MTU %s%s%s' \
+		"$LABEL" "${ni_iface:-?}" "$R" "$link_badge" \
+		"$CYN" "${ni_speed:-?}" "$R" "$MUTED" "$duplex_s" "$R" \
+		"$CYN" "${ni_mtu:-?}" "$R")")
+	net_link+=("$(printf '%s%s%s   %s%s%s' \
+		"$CYN" "${ni_cidr:-${ni_ip:-?}}" "$R" "$MUTED" "$(trunc "${ni_fqdn:-?}" 36)" "$R")")
+	net_link+=("$(printf '%sRX%s %s%sG%s  %sTX%s %s%sG%s  %s' \
+		"$MUTED" "$R" "$CYN" "$ni_rx" "$R" \
+		"$MUTED" "$R" "$CYN" "$ni_tx" "$R" \
+		"$err_badge")")
+	net_link+=("$(printf '%sTCP%s %s%s%s   %sVPN%s %s%s%s %s' \
+		"$MUTED" "$R" "$CYN" "$ni_tcp" "$R" \
+		"$MUTED" "$R" "$LABEL" "$ni_vpn" "$R" "$vpn_badge")")
+
+	net_dns+=("$(printf '%sresolve%s %s' "$MUTED" "$R" "$dns_badge")")
+	local dip dok dlat dns_line="" dns_n=0
+	while IFS=$'\t' read -r dip dok dlat; do
+		[[ -z "$dip" ]] && continue
+		local cell
+		if [[ "$dok" == "true" ]]; then
+			cell=$(printf '%s%s%s %sOK%s %s%.1fms%s' \
+				"$CYN" "$dip" "$R" "$OK" "$R" \
+				"$(latency_color "${dlat:-0}")" "${dlat:-0}" "$R")
+		else
+			cell=$(printf '%s%s%s %sDN%s' "$CYN" "$dip" "$R" "$BAD" "$R")
+		fi
+		if [[ -z "$dns_line" ]]; then
+			dns_line="$cell"
+		else
+			net_dns+=("${dns_line}    ${cell}")
+			dns_line=""
+		fi
+		dns_n=$(( dns_n + 1 ))
+	done < <(jq -r '(.netinfo.dns_pings // [])[]? | [.ip, (.ok|tostring), (.latency_ms // 0)] | @tsv' <<< "$data")
+	[[ -n "$dns_line" ]] && net_dns+=("$dns_line")
+	(( dns_n == 0 )) && net_dns+=("$(printf '%s(no DNS servers)%s' "$MUTED" "$R")")
+	net_dns+=("$(printf '%sGW%s %s%s%s  %s%s%s  %sWAN%s %s%s%s' \
+		"$MUTED" "$R" "$CYN" "${ni_gw:-?}" "$R" \
+		"$MUTED" "${ni_gw_mac:-}" "$R" \
+		"$MUTED" "$R" "$CYN" "${ni_pub:-—}" "$R")")
+	append_dual_box "LINK" "DNS / GATEWAY" net_link net_dns
+
+	# --- VLANS | PINGS: one dual box, 2 sub-columns per half ---
+	local -a net_vlan=() ping_cells=()
+	local vu_ok vu_cfg
+	vu_ok=$(jq -r '.unifi.ok // false' <<< "$data")
+	vu_cfg=$(jq -r '.unifi.configured // false' <<< "$data")
+	if [[ "$vu_ok" == "true" ]]; then
+		local vname vvlan vsub
+		while IFS=$'\t' read -r vvlan vname vsub; do
+			[[ -z "$vname" ]] && continue
+			net_vlan+=("$(format_vlan_cell "$vvlan" "$vname" "$vsub")")
+		done < <(jq -r '(.unifi.vlans // [])[]? | [(.vlan|tostring), .name, (.subnet // "")] | @tsv' <<< "$data")
+		(( ${#net_vlan[@]} == 0 )) && net_vlan+=("$(printf '%s(no VLANs returned)%s' "$MUTED" "$R")")
+	elif [[ "$vu_cfg" == "true" ]]; then
+		net_vlan+=("$(printf '%sUniFi login failed — check hcc-unifi.env%s' "$WARN" "$R")")
+	else
+		net_vlan+=("$(printf '%sAdd hcc-unifi.env (UDM admin) to list VLANs%s' "$MUTED" "$R")")
+	fi
+	local pname plabel ptarget pok plat pdisp
+	while IFS=$'\t' read -r pname plabel ptarget pok plat; do
+		pdisp="${plabel:-$pname}"
+		ping_cells+=("$(format_ping_cell "$pdisp" "$ptarget" "$pok" "$plat")")
+	done < <(jq -r '
+		(.network // [])[]? |
+		[.name, (.label // ""), .target, (.ok|tostring), (.latency_ms // 0)] | @tsv
+	' <<< "$data")
+	(( ${#ping_cells[@]} == 0 )) && ping_cells+=("$(printf '%s(no targets)%s' "$MUTED" "$R")")
+	append_dual_quad_box "VLANS" "PINGS" net_vlan ping_cells
+
+	# --- SPEEDTEST: compact full-width box ---
+	local net_speed_line="" sd su sl sw ss
+	sd=$(jq -r '.unifi.speedtest.download_mbps // .netinfo.speedtest.download_mbps // empty' <<< "$data")
+	su=$(jq -r '.unifi.speedtest.upload_mbps // .netinfo.speedtest.upload_mbps // empty' <<< "$data")
+	sl=$(jq -r '.unifi.speedtest.latency_ms // .netinfo.speedtest.latency_ms // empty' <<< "$data")
+	sw=$(jq -r '.unifi.speedtest.when // .netinfo.speedtest.when // empty' <<< "$data")
+	ss=$(jq -r '.unifi.speedtest.source // .netinfo.speedtest.source // empty' <<< "$data")
+	if [[ -n "$sd" || -n "$su" ]]; then
+		net_speed_line="$(printf '%s↓%s %s%s Mbps%s   %s↑%s %s%s Mbps%s   %sping%s %s%s ms%s   %s%s%s' \
+			"$MUTED" "$R" "$CYN" "${sd:-?}" "$R" \
+			"$MUTED" "$R" "$CYN" "${su:-?}" "$R" \
+			"$MUTED" "$R" "$CYN" "${sl:-?}" "$R" \
+			"$MUTED" "${ss:-}${sw:+ · $sw}" "$R")"
+	else
+		net_speed_line="$(printf '%sNo speedtest yet — run a UniFi speedtest or provide hcc-speedtest.json%s' "$MUTED" "$R")"
+	fi
+	BODY+=("GRIDTOP:SPEEDTEST")
+	BODY+=("GRIDFULL:${net_speed_line:-${net_speed[0]:-}}")
+	BODY+=("GRIDBOT:")
+
+	BODY+=("GAP")
+	# Two-column bottom: Proxmox (left) | Frigate + HA doors (right)
+	local -a left_lines=() right_lines=()
+	local half cw li ri max_i
+	half=$(col_half_width "$cols")
+	cw=$(( half / 2 - 1 ))
+	(( cw < 24 )) && cw=24
+
+	while IFS=$'\t' read -r name _ip online _ui _lat cpu mem vr vt; do
+		local cpu_sp mem_sp cpu_hist mem_hist line
+		cpu_hist=$(jq -r --arg n "$name" '.pve_history[$n].cpu | join(" ") // ""' <<< "$data")
+		mem_hist=$(jq -r --arg n "$name" '.pve_history[$n].mem | join(" ") // ""' <<< "$data")
+		cpu_sp=$(sparkline "$cpu_hist")
+		mem_sp=$(sparkline "$mem_hist")
+		if [[ "$online" == "true" ]]; then
+			line="$(format_pve_node_line "$name" "${cpu:-0}" "${mem:-0}" "${vr:-0}" "${vt:-0}" "$cpu_sp" "$mem_sp")"
+			left_lines+=("$line")
+		else
+			left_lines+=("$(printf '%s%-9s%s %sOFFLINE%s' "$LABEL" "$name" "$R" "$BAD" "$R")")
+		fi
+	done < <(jq -r '.proxmox[]? | [.name, .ip, (.online|tostring), (.ui_ok|tostring),
+		(.latency_ms // 0), (.cpu_pct // 0), (.mem_pct // 0),
+		(.vms_running // 0), (.vms_total // 0)] | @tsv' <<< "$data")
+	(( ${#left_lines[@]} == 0 )) && left_lines+=("$(printf '%sNo Proxmox nodes%s' "$MUTED" "$R")")
+
+	local -a running=() stopped=()
+	while IFS= read -r vm_line; do
+		local vname vstatus vcpu vmem_gb vos
+		vname=$(jq -r '.name' <<< "$vm_line")
+		vstatus=$(jq -r '.status' <<< "$vm_line")
+		vcpu=$(jq -r '.cpu_pct // 0' <<< "$vm_line")
+		vmem_gb=$(jq -r '.mem_gb // 0' <<< "$vm_line")
+		vos=$(jq -r '.os // "vm"' <<< "$vm_line")
+		if [[ "$vstatus" == "running" ]]; then
+			running+=("$(wrap_if_changed "vm:${vname}" "$vstatus" "$(format_vm_cell "$vname" "$vstatus" "$vcpu" "$vmem_gb" "$vos")")")
+		else
+			stopped+=("$vname")
+		fi
+	done < <(jq -c '.workloads[]?' <<< "$data")
+
+	left_lines+=("$(printf '%sVM FLEET  L=linux  W=windows%s' "$MUTED" "$R")")
+	if (( ${#running[@]} == 0 )); then
+		left_lines+=("$(printf '%sNo VM data%s' "$MUTED" "$R")")
+	else
+		local vi=0
+		while (( vi < ${#running[@]} )); do
+			if (( vi + 1 < ${#running[@]} )); then
+				left_lines+=("$(printf '%-*s %s' "$cw" "${running[vi]}" "${running[vi+1]}")")
+				vi=$(( vi + 2 ))
+			else
+				left_lines+=("${running[vi]}")
+				vi=$(( vi + 1 ))
+			fi
+		done
+	fi
+	if (( ${#stopped[@]} > 0 )); then
+		local stopped_list stopped_key stopped_row
+		stopped_list=$(IFS=', '; echo "${stopped[*]}")
+		stopped_key="stopped:${#stopped[@]}:${stopped_list:0:40}"
+		stopped_row=$(printf '%s%d stopped:%s %s' "$WARN" "${#stopped[@]}" "$R" "$(trunc "$stopped_list" $(( half - 14 )) )")
+		left_lines+=("$(wrap_if_changed "$stopped_key" "$stopped_list" "$stopped_row")")
+	fi
+
+	if [[ "$(jq -r '.frigate.ok // false' <<< "$data")" != "true" ]]; then
+		right_lines+=("$(printf '%sFrigate unreachable%s' "$BAD" "$R")")
+	else
+		local fv fu fs fp fg fm fi ms recent_line
+		fv=$(jq -r '.frigate.version // "?"' <<< "$data")
+		fu=$(jq -r '.frigate.uptime_sec // 0' <<< "$data")
+		fs=$(jq -r '.frigate.storage_pct // 0' <<< "$data")
+		fp=$(jq -r '.frigate.storage_used_gb // 0' <<< "$data")
+		fg=$(jq -r '.frigate.gpu.gpu // "?"' <<< "$data")
+		fm=$(jq -r '.frigate.gpu.mem // "?"' <<< "$data")
+		fi=$(jq -r '.frigate.inference_ms // 0' <<< "$data")
+		ms=$(( fu / 3600 ))
+		right_lines+=("$(printf '%sv%s%s up %sh store %s%s%%%s %sgB' \
+			"$CYN" "$fv" "$R" "$ms" "$(pct_color "$fs")" "$fs" "$R" "$fp")")
+		right_lines+=("$(printf '%sGPU %s mem%s inf %sms%s' "$MUTED" "$fg" "$fm" "$fi" "$R")")
+		while IFS= read -r cam_line; do
+			local cs cf cd csk csk2
+			cs=$(jq -r '.short' <<< "$cam_line")
+			cf=$(jq -r '.camera_fps // 0' <<< "$cam_line")
+			cd=$(jq -r '.detection_fps // 0' <<< "$cam_line")
+			csk=$(jq -r '.skipped_fps // 0' <<< "$cam_line")
+			csk2=$(jq -r '.enabled' <<< "$cam_line")
+			right_lines+=("$(format_cam_line "$cs" "$cf" "$cd" "$csk" "$csk2")")
+		done < <(jq -c '.frigate.cameras[]?' <<< "$data")
+		recent_line=""
+		while IFS= read -r ev; do
+			local el ec
+			el=$(jq -r '.label' <<< "$ev")
+			ec=$(jq -r '.camera' <<< "$ev")
+			recent_line+=$(printf '%s%s@%s%s  ' "$CYN" "$el" "$ec" "$R")
+		done < <(jq -c '.frigate.recent[]?' <<< "$data")
+		[[ -n "$recent_line" ]] && right_lines+=("$(printf '%sRecent:%s %s' "$MUTED" "$R" "$(trunc "$recent_line" $(( half - 8 )) )")")
+	fi
+
+	if [[ "$(jq -r '.homeassistant.ok // false' <<< "$data")" == "true" ]]; then
+		local hav door_count=0 thermo_count=0
+		hav=$(jq -r '.homeassistant.version // ""' <<< "$data")
+		if [[ -n "$hav" && "$hav" != "null" ]]; then
+			right_lines+=("$(printf '%sHome Assistant v%s%s' "$CYN" "$hav" "$R")")
+		else
+			right_lines+=("$(printf '%sHome Assistant%s' "$CYN" "$R")")
+		fi
+
+		local -a thermo_lines=()
+		while IFS=$'\t' read -r tname tcur ttgt tunit taction tmode thum thum_tgt; do
+			# Bash `read` collapses empty tab fields, so the jq output uses placeholders.
+			[[ "$tunit" == "__EMPTY__" ]] && tunit=""
+			[[ "$tmode" == "__EMPTY__" ]] && tmode=""
+			[[ "$thum_tgt" == "__EMPTY__" ]] && thum_tgt=""
+			local val row
+			val="${tcur}|${ttgt}|${tunit}|${taction}|${tmode}|${thum}|${thum_tgt}"
+			row="$(format_thermostat_line "$tname" "$tcur" "$ttgt" "$tunit" "$taction" "$tmode" "$thum" "$thum_tgt")"
+			thermo_lines+=("$(wrap_if_changed "thermo:${tname}" "$val" "$row")")
+			thermo_count=$(( thermo_count + 1 ))
+		done < <(jq -r '.homeassistant.thermostats[]? |
+			[.name,
+				(.current_temp // "" | tostring),
+				(.target_temp // "" | tostring),
+				(if ((.unit // "") == "") then "__EMPTY__" else (.unit // "") end),
+				(.hvac_action // ""),
+				(if ((.hvac_mode // "") == "") then "__EMPTY__" else (.hvac_mode // "") end),
+				(.current_humidity // "" | tostring),
+				(if ((.target_humidity // "") == "") then "__EMPTY__" else ((.target_humidity // "")|tostring) end)
+			] | @tsv' <<< "$data")
+		if (( thermo_count == 0 )); then
+			right_lines+=("$(printf '%sNo thermostat entities found%s' "$MUTED" "$R")")
+		elif (( thermo_count == 1 )); then
+			# Compact: single-line thermostat (saves 1 row so door list doesn't get pushed off).
+			right_lines+=("${thermo_lines[0]}")
+		else
+			right_lines+=("$(printf '%sThermostats%s' "$MUTED" "$R")")
+			right_lines+=("${thermo_lines[@]}")
+		fi
+
+		ha_doors_start=${#right_lines[@]}
+		right_lines+=("$(printf '%sDoors%s' "$MUTED" "$R")")
+		while IFS=$'\t' read -r dname dstate; do
+			right_lines+=("$(wrap_if_changed "door:${dname}" "$dstate" "$(format_door_line "$dname" "$dstate")")")
+			door_count=$(( door_count + 1 ))
+		done < <(jq -r '.homeassistant.doors[]? | [.name, .state] | @tsv' <<< "$data")
+		(( door_count == 0 )) && right_lines+=("$(printf '%sNo door entities found%s' "$MUTED" "$R")")
+	elif [[ "$(jq -r '.homeassistant.configured // false' <<< "$data")" == "true" ]]; then
+		right_lines+=("$(printf '%sHA API failed — check token%s' "$BAD" "$R")")
+	else
+		right_lines+=("$(printf '%sHA: add hcc-homeassistant.env%s' "$MUTED" "$R")")
+	fi
+
+	BODY+=("BOXTOP:PROXMOX|FRIGATE & HOME ASSISTANT")
+	max_i=${#left_lines[@]}
+	(( ${#right_lines[@]} > max_i )) && max_i=${#right_lines[@]}
+	local section_gaps=4 banner_file="$BANNER_WIDE" banner_lines=7 logo_budget max_box weather_budget=0 net_budget=0
+	(( cols < 100 )) && [[ -f "$BANNER_NARROW" ]] && banner_file="$BANNER_NARROW"
+	if [[ -f "$banner_file" ]]; then
+		banner_lines=$(grep -c '[^[:space:]]' "$banner_file" 2>/dev/null || echo 7)
+	fi
+	if [[ "${HCC_SHOW_WEATHER:-1}" == "1" ]] && echo "$data" | jq -e '.weather.ok == true' >/dev/null 2>&1; then
+		weather_budget=6
+	fi
+	# NETWORK: three dual boxes (LINK/DNS, VLANS/SPEED, PINGS)
+	net_budget=12
+	logo_budget=$(( banner_lines + TOP_PAD ))
+	max_box=$(( rows - logo_budget - weather_budget - net_budget - 18 - section_gaps ))
+	(( max_box < 3 )) && max_box=3
+
+	# If HA thermostats push the bottom-right box past available height,
+	# keep the door list visible by truncating thermostats first.
+	if (( ha_doors_start >= 0 )) && (( ${#right_lines[@]} > max_box )); then
+		local door_len=$(( ${#right_lines[@]} - ha_doors_start ))
+		if (( door_len <= max_box )); then
+			local thermo_avail=$(( max_box - door_len ))
+			if (( thermo_avail < ha_doors_start )); then
+				if (( thermo_avail <= 0 )); then
+					right_lines=( "${right_lines[@]:ha_doors_start}" )
+				else
+					# Keep the bottom-most part of the thermostat section
+					# (HA version line might get dropped first if needed).
+					local thermo_start=$(( ha_doors_start - thermo_avail ))
+					local -a thermo_keep=( "${right_lines[@]:thermo_start:thermo_avail}" )
+					right_lines=( "${thermo_keep[@]}" "${right_lines[@]:ha_doors_start}" )
+				fi
+			fi
+		else
+			# Extreme case: if doors alone exceed the box, fall back to truncation from the top.
+			right_lines=( "${right_lines[@]:0:max_box}" )
+		fi
+	fi
+
+	(( max_i > max_box )) && max_i=$max_box
+	for (( ri=0; ri < max_i; ri++ )); do
+		BODY+=("BOXROW:${left_lines[ri]:-}|${right_lines[ri]:-}")
+	done
+	BODY+=("BOXBOT:")
+
+	BODY+=("FOOT:$(format_footer "$data" "${ip:-$(primary_ip "$data")}")")
+}
+
+print_body() {
+	local cols=$1 rows=$2 logo_h=$3
+	local pw line_count g
+	pw=$(panel_width "$cols")
+	line_count=$(( logo_h + 1 ))
+	printf '\n'
+
+	for g in "${BODY[@]}"; do
+		case "$g" in
+			GAP)
+				printf '\n'
+				line_count=$(( line_count + 1 ))
+				;;
+			SEC:*)
+				emit_colored "$cols" "$ACCENT" "${BOLD}${g#SEC:}${R}"
+				emit_colored "$cols" "$LINE" "$(rpt "$pw" '-')"
+				line_count=$(( line_count + 2 ))
+				;;
+			SEC2:*)
+				local titles="${g#SEC2:}"
+				emit_sec2 "$cols" "${titles%%|*}" "${titles#*|}"
+				line_count=$(( line_count + 2 ))
+				;;
+			ALERT:*)
+				emit_ansi "$cols" "${g#ALERT:}"
+				line_count=$(( line_count + 1 ))
+				;;
+			BOXTOP:*)
+				local titles="${g#BOXTOP:}"
+				emit_box_top "$cols" "${titles%%|*}" "${titles#*|}"
+				line_count=$(( line_count + 1 ))
+				;;
+			BOXROW:*)
+				local lr="${g#BOXROW:}"
+				emit_box_row "$cols" "${lr%%|*}" "${lr#*|}"
+				line_count=$(( line_count + 1 ))
+				;;
+			BOX4ROW:*)
+				local qr="${g#BOX4ROW:}"
+				local q1="${qr%%|*}"; qr="${qr#*|}"
+				local q2="${qr%%|*}"; qr="${qr#*|}"
+				local q3="${qr%%|*}"; q4="${qr#*|}"
+				emit_box_row_quad "$cols" "$q1" "$q2" "$q3" "$q4"
+				line_count=$(( line_count + 1 ))
+				;;
+			BOXBOT:*)
+				emit_box_bottom "$cols"
+				line_count=$(( line_count + 1 ))
+				;;
+			GRIDTOP:*)
+				emit_grid_box_top "$cols" "${g#GRIDTOP:}"
+				line_count=$(( line_count + 1 ))
+				;;
+			GRIDROW:*)
+				local gr="${g#GRIDROW:}"
+				emit_grid_box_row "$cols" "${gr%%|*}" "${gr#*|}"
+				line_count=$(( line_count + 1 ))
+				;;
+			GRIDFULL:*)
+				emit_grid_box_row_full "$cols" "${g#GRIDFULL:}"
+				line_count=$(( line_count + 1 ))
+				;;
+			GRIDBOT:*)
+				emit_grid_box_bottom "$cols"
+				line_count=$(( line_count + 1 ))
+				;;
+			COL2:*)
+				local lr="${g#COL2:}"
+				emit_col_pair "$cols" "${lr%%|*}" "${lr#*|}"
+				line_count=$(( line_count + 1 ))
+				;;
+			FOOT:*)
+				emit_colored "$cols" "$MUTED" "${g#FOOT:}"
+				line_count=$(( line_count + 1 ))
+				;;
+			ROW:*)
+				emit_ansi "$cols" "${g#ROW:}"
+				line_count=$(( line_count + 1 ))
+				;;
+		esac
+	done
+
+	while (( line_count < rows )); do
+		printf '\n'
+		line_count=$(( line_count + 1 ))
+	done
+}
+
+render_dashboard() {
+	local data=$1
+	init_theme
+
+	local cols rows logo_h pw frame_file
+	read -r cols rows <<< "$(read_tty_size)"
+	pw=$(panel_width "$cols")
+
+	build_body "$data" "$cols" "$pw" "$rows"
+
+	frame_file="$(mktemp "${TMPDIR:-/tmp}/hcc-frame.XXXXXX")"
+	{
+		print_logo "$cols"
+		print_weather_strip "$cols" "$data"
+		print_body "$cols" "$rows" "$(( LOGO_LINES + WEATHER_LINES ))"
+	} > "$frame_file"
+
+	screen_clear
+	cat "$frame_file"
+	rm -f "$frame_file"
+
+	save_snapshot "$data"
+}
+
+setup_console() {
+	setterm -background black -foreground white >/dev/null 2>&1 || true
+	setterm -cursor off >/dev/null 2>&1 || tput civis >/dev/null 2>&1 || true
+}
+
+screen_clear() {
+	# Hide cursor, home, clear screen + scrollback (prevents ghost lines on refresh)
+	printf '\033[?25l\033[H\033[2J\033[3J'
+}
+
+restore_console() {
+	printf '\033[?25h' 2>/dev/null || true
+	setterm -cursor on >/dev/null 2>&1 || tput cnorm >/dev/null 2>&1 || true
+	setterm -default >/dev/null 2>&1 || true
+}
+
+play_startup_sound() {
+	[[ "${HCC_STARTUP_SOUND_ENABLED:-1}" == "1" ]] || return
+	[[ "${HCC_PREVIEW:-}" == 1 ]] && return
+	[[ -r "$STARTUP_SOUND_FILE" ]] || return
+	command -v aplay >/dev/null 2>&1 || return
+
+	# Best-effort mixer prep for internal speaker at boot.
+	command -v amixer >/dev/null 2>&1 && {
+		amixer -q -c 0 sset Master "$STARTUP_SOUND_VOLUME" unmute >/dev/null 2>&1 || true
+		amixer -q -c 0 sset Speaker "$STARTUP_SOUND_VOLUME" unmute >/dev/null 2>&1 || true
+		amixer -q -c 0 sset PCM "$STARTUP_SOUND_VOLUME" >/dev/null 2>&1 || true
+		amixer -q -c 0 sset 'Auto-Mute Mode' 'Speaker Only' >/dev/null 2>&1 || true
+	}
+
+	(
+		local attempt
+		for (( attempt=1; attempt<=STARTUP_SOUND_RETRIES; attempt++ )); do
+			aplay -q -D "$STARTUP_SOUND_DEVICE" "$STARTUP_SOUND_FILE" >/dev/null 2>&1 && exit 0
+			aplay -q "$STARTUP_SOUND_FILE" >/dev/null 2>&1 && exit 0
+			sleep "$STARTUP_SOUND_RETRY_DELAY"
+		done
+	) &
+}
+
+load_fitted_logo() {
+	local cols=$1
+	local -a lines=()
+	local max_w=0 fitted logo_w line
+
+	while IFS= read -r line; do
+		[[ -z "$line" ]] && continue
+		lines+=("$line")
+	done < <(load_banner "$cols")
+	(( ${#lines[@]} == 0 )) && return
+
+	logo_w=$(( cols - LOGO_SAFE_COLS ))
+	(( logo_w < 80 )) && logo_w=$(( cols - 2 ))
+	for i in "${!lines[@]}"; do
+		if (( ${#lines[i]} <= logo_w )); then
+			fitted="${lines[i]}"
+		else
+			fitted="$(fit_line_to_width "${lines[i]}" "$logo_w")"
+		fi
+		lines[i]="$fitted"
+		(( ${#fitted} > max_w )) && max_w=${#fitted}
+	done
+
+	printf '%s\n' "${lines[@]}"
+}
+
+print_color_band() {
+	local cols=$1 shift=$2 i color
+	for (( i=0; i<cols; i++ )); do
+		color=$(( 22 + ((i + shift) % 8) * 6 ))
+		printf '\033[48;5;%sm \033[0m' "$color"
+	done
+	printf '\n'
+}
+
+draw_startup_classic() {
+	local cols=$1
+	local -a lines=()
+	local max_w=0 margin line
+	mapfile -t lines < <(load_fitted_logo "$cols")
+	(( ${#lines[@]} == 0 )) && return
+
+	for line in "${lines[@]}"; do
+		(( ${#line} > max_w )) && max_w=${#line}
+	done
+	margin=$(( (cols - max_w) / 2 ))
+	(( margin < 0 )) && margin=0
+
+	play_startup_sound
+	screen_clear
+	printf '\n'
+	printf '%s%sInitializing %s...%s\n\n' "$MUTED" "$(rpt "$margin" ' ')" "$HCC_PRODUCT_NAME" "$R"
+
+	for line in "${lines[@]}"; do
+		printf '%s%s%s%s\n' "$LOGO" "$(rpt "$margin" ' ')" "$line" "$R"
+		sleep 0.08
+	done
+
+	sleep 0.5
+}
+
+draw_startup_color_splash() {
+	local cols=$1
+	local -a lines=()
+	local max_w=0 margin line i status text lvl progress bar_w filled
+	local -a items=(
+		"ok|Starting network manager"
+		"ok|Initializing storage pools"
+		"ok|Loading Intel and NVIDIA drivers"
+		"ok|Mounting Backup_Pool"
+		"ok|Starting Docker engine"
+		"ok|Starting Nextcloud stack"
+		"ok|Starting HCC telemetry collectors"
+		"warn|UniFi credentials not configured"
+		"ok|Starting HCC dashboard on tty1"
+	)
+	local steps=${#items[@]}
+	mapfile -t lines < <(load_fitted_logo "$cols")
+	(( ${#lines[@]} == 0 )) && return
+	for line in "${lines[@]}"; do
+		(( ${#line} > max_w )) && max_w=${#line}
+	done
+	margin=$(( (cols - max_w) / 2 ))
+	(( margin < 0 )) && margin=0
+
+	play_startup_sound
+	for (( i=0; i<steps; i++ )); do
+		screen_clear
+		print_color_band "$cols" "$i"
+		printf '\n'
+		printf '%s%s%s%s\n' "$BOLD$ACCENT" "$(rpt "$margin" ' ')" "$HCC_PRODUCT_NAME" "$R"
+		printf '%s%s%s%s\n\n' "$MUTED" "$(rpt "$margin" ' ')" "Boot and service initialization" "$R"
+		for line in "${lines[@]}"; do
+			printf '%s%s%s%s\n' "$LOGO" "$(rpt "$margin" ' ')" "$line" "$R"
+		done
+		printf '\n'
+		for (( j=0; j<steps; j++ )); do
+			lvl="${items[j]%%|*}"
+			text="${items[j]#*|}"
+			if (( j < i )); then
+				if [[ "$lvl" == "warn" ]]; then
+					printf '%s[WARN]%s %s\n' "$WARN" "$R" "$text"
+				else
+					printf '%s[ OK ]%s %s\n' "$OK" "$R" "$text"
+				fi
+			elif (( j == i )); then
+				printf '%s[ .. ]%s %s\n' "$CYN" "$R" "$text"
+			else
+				printf '%s[    ]%s %s\n' "$DIM" "$R" "$text"
+			fi
+		done
+		progress=$(( (i + 1) * 100 / steps ))
+		bar_w=40
+		filled=$(( progress * bar_w / 100 ))
+		printf '\n'
+		printf '%s%s%s\n' "$ACCENT" "$(center_plain "Progress [$(rpt "$filled" '#')$(rpt "$(( bar_w - filled ))" '-')] ${progress}%" "$cols")" "$R"
+		print_color_band "$cols" "$(( i + 3 ))"
+		sleep 0.18
+	done
+	sleep 0.35
+}
+
+draw_startup_animation() {
+	[[ "${HCC_STARTUP_ANIM:-1}" == "1" ]] || return
+	case "${STARTUP_STYLE,,}" in
+		classic|logo)
+			draw_startup_classic "$1"
+			;;
+		*)
+			draw_startup_color_splash "$1"
+			;;
+	esac
+}
+
+acquire_singleton_lock() {
+	[[ "${HCC_PREVIEW:-}" == 1 || "${HCC_ONCE:-}" == 1 ]] && return 0
+	exec 9>"$LOCK_FILE"
+	if flock -n 9; then
+		:
+	elif [[ -n "${HCC_SYSTEMD:-}" || -n "${INVOCATION_ID:-}" ]]; then
+		if ! flock -w 30 9; then
+			echo "hcc-dashboard: could not acquire lock after 30s" >&2
+			exit 1
+		fi
+	else
+		exit 0
+	fi
+	if [[ -n "${HCC_SYSTEMD:-}" || -n "${INVOCATION_ID:-}" ]]; then
+		echo $$ >"$PID_FILE"
+	fi
+}
+
+main_loop() {
+	acquire_singleton_lock
+
+	local tty_out="$TTY_DEV"
+	[[ -n "${HCC_TTY:-}" ]] && tty_out="$HCC_TTY"
+
+	if [[ "${HCC_PREVIEW:-}" != 1 ]] && [[ -w "$tty_out" ]]; then
+		exec >"$tty_out" 2>/dev/null
+	fi
+
+	read -r SCREEN_COLS SCREEN_ROWS <<< "$(read_tty_size)"
+	setup_console
+	trap 'restore_console; screen_clear' EXIT INT TERM
+	init_theme
+	draw_startup_animation "$SCREEN_COLS"
+
+	local once=0
+	[[ "${HCC_ONCE:-}" == 1 ]] && once=1
+
+	while true; do
+		CYCLE_START=$(date +%s)
+		init_theme
+
+		if [[ -r "$STATUS_FILE" ]] && command -v jq >/dev/null 2>&1; then
+			local data
+			data="$(cat "$STATUS_FILE")"
+			if echo "$data" | jq -e . >/dev/null 2>&1; then
+				render_dashboard "$data"
+			else
+				render_dashboard '{"hostname":"'"$(hostname -s)"'","uptime":"?","load":"?","memory":"?","ips":[],"updated":"collecting…","storage":{"pools":[]},"services":[],"network":[]}'
+			fi
+		else
+			render_dashboard '{"hostname":"'"$(hostname -s)"'","uptime":"?","load":"?","memory":"?","ips":[],"updated":"collecting…","storage":{"pools":[]},"services":[],"network":[]}'
+		fi
+
+		[[ "$once" == 1 ]] && trap - EXIT INT TERM
+		[[ "$once" == 1 ]] && break
+		sleep "$REFRESH_SEC"
+	done
+}
+
+main_loop

@@ -1,0 +1,12 @@
+[Unit]
+Description=Collect HCC Terminal standalone status snapshot
+After=local-fs.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+Environment=HCC_TERMINAL_APP_ROOT=@INSTALL_DIR@
+Environment=HCC_TERMINAL_CONFIG_DIR=@CONFIG_DIR@
+Environment=HCC_TERMINAL_STATE_DIR=@STATE_DIR@
+EnvironmentFile=-@CONFIG_DIR@/hcc-terminal.env
+ExecStart=@INSTALL_DIR@/bin/hcc-collect-status

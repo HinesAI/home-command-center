@@ -1,0 +1,4 @@
+# host,user,node_id,agent_id,core_base_url,interval,services,storage_paths,containers
+192.168.4.63,root,proxmox-01,agent-proxmox-01,http://192.168.4.237:18080,120,docker,/,
+192.168.4.226,root,proxmox-02,agent-proxmox-02,http://192.168.4.237:18080,120,docker,/,
+192.168.4.227,root,proxmox-03,agent-proxmox-03,http://192.168.4.237:18080,120,docker,/,

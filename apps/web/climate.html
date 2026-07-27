@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HCC | Climate Controls</title>
+    <link rel="stylesheet" href="./styles.css?v=23" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="./index.html"><span class="brand-mark">H</span><span><strong>Home Command Center</strong></span></a>
+        <nav id="appNav" class="app-nav"></nav>
+        <div class="session-tools">
+          <span id="authUserLabel" class="user-label"></span>
+          <a id="adminNavLink" href="./admin.html">Admin</a>
+          <button id="logoutBtn" type="button">Logout</button>
+        </div>
+      </header>
+      <main class="dashboard page-grid">
+        <section class="page-title">
+          <div>
+            <p class="eyebrow">Integrations</p>
+            <h1>Climate Controls</h1>
+            <p id="climatePageMeta">Sensi thermostat via Home Assistant</p>
+          </div>
+          <div class="section-actions">
+            <span id="climatePageStatus" class="status-pill">-</span>
+            <span id="climateTimeLabel">Updated: -</span>
+          </div>
+        </section>
+
+        <section class="stat-grid">
+          <article class="stat-card"><span>Thermostats</span><strong id="climateThermostatCount">-</strong><small>Climate entities</small></article>
+          <article class="stat-card"><span>Online</span><strong id="climateOnlineCount">-</strong><small>Reporting now</small></article>
+          <article class="stat-card"><span>Active</span><strong id="climateActiveCount">-</strong><small>Heating or cooling</small></article>
+          <article class="stat-card"><span>Current</span><strong id="climatePrimarySummary">-</strong><small>Inside / setpoint</small></article>
+        </section>
+
+        <section class="overview-section">
+          <div class="section-header">
+            <h2>Thermostat</h2>
+            <a id="climateHaLink" class="section-link" href="#" target="_blank" rel="noopener">Open Home Assistant</a>
+          </div>
+          <p class="section-note">Tap a mode or use +/− to adjust the setpoint. Changes are sent through Home Assistant to your Sensi thermostat.</p>
+          <div id="climateCards" class="climate-grid">
+            <p class="empty-state">Loading thermostat...</p>
+          </div>
+        </section>
+      </main>
+      <footer class="page-footer"><span id="errorLabel"></span></footer>
+    </div>
+    <script src="./common.js?v=23"></script>
+    <script src="./climate.js?v=3"></script>
+    <script src="./climate-page.js?v=1"></script>
+  </body>
+</html>

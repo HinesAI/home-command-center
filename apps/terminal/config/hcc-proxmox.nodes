@@ -1,0 +1,2 @@
+# Proxmox hypervisors: name|IP, one per line.
+# pve1|192.168.1.10

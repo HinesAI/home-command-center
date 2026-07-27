@@ -1,0 +1,206 @@
+openapi: 3.1.0
+info:
+  title: HCCv2 Core API
+  version: 0.1.0
+  description: Control-plane API for fleet state, services, alerts, and dashboard widgets.
+servers:
+  - url: https://hcc-core.local/api/v1
+paths:
+  /fleet/nodes:
+    get:
+      summary: List known nodes
+      responses:
+        '200':
+          description: Node list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Node'
+  /fleet/nodes/{nodeId}:
+    get:
+      summary: Get node details
+      parameters:
+        - in: path
+          name: nodeId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Node detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Node'
+        '404':
+          description: Node not found
+  /fleet/nodes/{nodeId}/services:
+    get:
+      summary: List services for a node
+      parameters:
+        - in: path
+          name: nodeId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Services for node
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Service'
+  /actions/service:
+    post:
+      summary: Submit service action request
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ServiceActionRequest'
+      responses:
+        '202':
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionReceipt'
+  /alerts:
+    get:
+      summary: List alerts
+      responses:
+        '200':
+          description: Alert list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Alert'
+  /widgets/registry:
+    get:
+      summary: Get available widget definitions
+      responses:
+        '200':
+          description: Widget definition list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/WidgetDefinition'
+components:
+  schemas:
+    Node:
+      type: object
+      required: [id, hostname, platform, health, lastSeen]
+      properties:
+        id:
+          type: string
+        hostname:
+          type: string
+        platform:
+          type: string
+          enum: [linux, windows]
+        health:
+          type: string
+          enum: [healthy, warning, critical, unknown]
+        lastSeen:
+          type: string
+          format: date-time
+    Service:
+      type: object
+      required: [id, nodeId, name, status]
+      properties:
+        id:
+          type: string
+        nodeId:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+          enum: [running, stopped, failed, unknown]
+        availableActions:
+          type: array
+          items:
+            type: string
+            enum: [start, stop, restart]
+    ServiceActionRequest:
+      type: object
+      required: [requestId, nodeId, serviceId, action, requestedBy]
+      properties:
+        requestId:
+          type: string
+        nodeId:
+          type: string
+        serviceId:
+          type: string
+        action:
+          type: string
+          enum: [start, stop, restart]
+        reason:
+          type: string
+        requestedBy:
+          type: string
+    ActionReceipt:
+      type: object
+      required: [requestId, acceptedAt]
+      properties:
+        requestId:
+          type: string
+        acceptedAt:
+          type: string
+          format: date-time
+    Alert:
+      type: object
+      required: [id, severity, title, source, firstSeen]
+      properties:
+        id:
+          type: string
+        severity:
+          type: string
+          enum: [info, warning, critical]
+        title:
+          type: string
+        source:
+          type: string
+        firstSeen:
+          type: string
+          format: date-time
+        resolved:
+          type: boolean
+    WidgetDefinition:
+      type: object
+      required: [id, title, category, dataSource]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        category:
+          type: string
+          enum: [fleet, services, alerts, storage, network, custom]
+        dataSource:
+          type: string
+        defaultSize:
+          type: string
+          enum: [sm, md, lg]
+

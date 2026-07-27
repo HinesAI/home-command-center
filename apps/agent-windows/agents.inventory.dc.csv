@@ -1,0 +1,4 @@
+# host,node_id,agent_id,core_base_url,interval,services,storage_drives
+192.168.4.100,hinesdc1,agent-hinesdc1,http://192.168.4.237:18080,120,"NTDS,DNS,DHCP,KDC,Netlogon,W32Time,WinRM,W3SVC,Spooler",C
+192.168.4.191,hinesdc2,agent-hinesdc2,http://192.168.4.237:18080,120,"NTDS,DNS,DHCP,KDC,Netlogon,W32Time,WinRM,W3SVC,Spooler",C
+192.168.4.147,hinesdc3,agent-hinesdc3,http://192.168.4.237:18080,120,"NTDS,DNS,DHCP,KDC,Netlogon,W32Time,WinRM,W3SVC,Spooler",C

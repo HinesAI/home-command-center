@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HCC | Host Detail</title>
+    <link rel="stylesheet" href="./styles.css?v=23" />
+    <link rel="stylesheet" href="./noc.css?v=11" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="./index.html"><span class="brand-mark">H</span><span><strong>Home Command Center</strong></span></a>
+        <nav id="appNav" class="app-nav"></nav>
+        <div class="session-tools">
+          <span id="authUserLabel" class="user-label"></span>
+          <a id="adminNavLink" href="./admin.html">Admin</a>
+          <button id="logoutBtn" type="button">Logout</button>
+        </div>
+      </header>
+      <main class="dashboard page-grid">
+        <section class="page-title">
+          <div>
+            <p class="eyebrow"><a class="section-link" href="./devices-servers.html">← Server fleet</a></p>
+            <h1 id="pageTitle">Server</h1>
+            <p><span id="nodeIdLabel">Node: -</span> · <span id="nodeTypeLabel">Type: -</span> · <span id="osLabel">OS: -</span> · <span id="timeLabel">Updated: -</span></p>
+          </div>
+          <div class="section-actions">
+            <span id="statusBadge" class="status-pill">UNKNOWN</span>
+          </div>
+        </section>
+
+        <section class="health-band noc-kpis">
+          <article class="meter-card noc-kpi" id="kpiCpu"><div class="metric-head"><span>CPU</span><strong class="noc-kpi-value">-</strong></div><div class="meter noc-bar"><span></span></div><p class="noc-kpi-sub">-</p></article>
+          <article class="meter-card noc-kpi" id="kpiMem"><div class="metric-head"><span>Memory</span><strong class="noc-kpi-value">-</strong></div><div class="meter noc-bar"><span></span></div><p class="noc-kpi-sub">-</p></article>
+          <article class="meter-card noc-kpi" id="kpiStorage"><div class="metric-head"><span>Storage</span><strong class="noc-kpi-value">-</strong></div><div class="meter noc-bar"><span></span></div></article>
+          <article class="meter-card noc-kpi" id="kpiNet"><div class="metric-head"><span>Network</span><strong class="noc-kpi-value">-</strong></div><p class="noc-kpi-sub">-</p></article>
+        </section>
+
+        <section class="host-hero">
+          <article class="overview-section">
+            <div class="section-header"><h2>Identity</h2></div>
+            <div class="timeline noc-grid-identity">
+              <div class="timeline-row"><time>Hostname</time><strong id="hostnameValue">-</strong><span></span></div>
+              <div class="timeline-row"><time>Host role</time><strong id="hostRoleValue">-</strong><span></span></div>
+              <div class="timeline-row"><time>CPU model</time><strong id="cpuModelValue">-</strong><span></span></div>
+              <div class="timeline-row"><time>CPU cores</time><strong id="cpuCoresValue">-</strong><span></span></div>
+              <div class="timeline-row"><time>Load</time><strong id="loadAvgValue">-</strong><span></span></div>
+              <div class="timeline-row"><time>Memory</time><strong id="memoryDetailValue">-</strong><span></span></div>
+              <div class="timeline-row"><time>Swap</time><strong id="swapDetailValue">-</strong><span></span></div>
+              <div class="timeline-row"><time>Uptime</time><strong id="uptimeValue">-</strong><span></span></div>
+              <div class="timeline-row"><time>Kernel</time><strong id="kernelValue">-</strong><span></span></div>
+              <div class="timeline-row"><time>Architecture</time><strong id="archValue">-</strong><span></span></div>
+              <div class="timeline-row"><time>IP addresses</time><strong id="ipsValue">-</strong><span></span></div>
+              <div class="timeline-row"><time>Virtualization</time><strong id="virtValue">-</strong><span></span></div>
+            </div>
+          </article>
+          <article class="overview-section host-console-column">
+            <div id="hostActionsSection">
+              <div class="section-header"><h2>Host controls</h2></div>
+              <div id="hostActions" class="action-row"></div>
+              <div id="actionStatus" class="action-status"></div>
+              <p class="cell-sub">Actions queue for the next agent heartbeat; UI shows queued state, not instant success.</p>
+            </div>
+            <div class="remote-access-panel" id="remoteAccessPanel">
+              <div class="section-header">
+                <h2 id="remoteAccessTitle">Remote access</h2>
+                <div class="section-actions" id="remoteAccessToolbar"></div>
+              </div>
+              <div class="remote-access-body" id="remoteAccessBody">
+                <div class="remote-access-placeholder">
+                  <p class="cell-sub">Loading remote access...</p>
+                </div>
+              </div>
+            </div>
+          </article>
+        </section>
+
+        <section class="overview-section hidden-panel" id="vmsPanel">
+          <div class="section-header"><h2>Virtual machines</h2><div id="vmTotals" class="cell-sub">-</div></div>
+          <div id="vmCards" class="card-grid"></div>
+        </section>
+
+        <section class="overview-section" id="storagePanel">
+          <div class="section-header"><h2>Physical storage</h2><div id="storageTotals" class="cell-sub">-</div></div>
+          <div class="detail-grid noc-storage-grid">
+            <article class="overview-section" id="zfsPoolsPanel"><div class="section-header"><h3>ZFS pools</h3></div><div class="table-wrap"><table class="fleet-table" id="zfsPoolsTable"><thead><tr><th>Pool</th><th>Health</th><th>Use</th><th>Capacity</th></tr></thead><tbody></tbody></table></div></article>
+            <article class="overview-section" id="filesystemsPanel"><div class="section-header"><h3>Filesystems</h3></div><div class="table-wrap"><table class="fleet-table" id="filesystemsTable"><thead><tr><th>Mount</th><th>Type</th><th>Use</th><th>Capacity</th></tr></thead><tbody></tbody></table></div></article>
+            <article class="overview-section" id="blockDevicesPanel"><div class="section-header"><h3>Block devices</h3></div><div class="table-wrap"><table class="fleet-table" id="blockDevicesTable"><thead><tr><th>Device</th><th>Type</th><th>FS</th><th>Size</th><th>Mount</th></tr></thead><tbody></tbody></table></div></article>
+          </div>
+        </section>
+
+        <section class="overview-section" id="servicesPanel">
+          <div class="section-header">
+            <h2>Services</h2>
+            <div class="section-tools">
+              <input id="servicesFilter" class="table-filter" type="search" placeholder="Filter services..." />
+              <span id="servicesCount" class="cell-sub">-</span>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="fleet-table" id="servicesTable">
+              <thead><tr><th>Service</th><th>Status</th><th>Actions</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="detail-grid">
+          <article class="overview-section" id="containersPanel">
+            <div class="section-header"><h2>Docker containers</h2></div>
+            <div id="containersGrid" class="timeline"></div>
+          </article>
+        </section>
+
+        <section class="overview-section">
+          <div class="section-header"><h2>Historical telemetry</h2></div>
+          <div class="table-wrap">
+            <table class="fleet-table" id="historyTable">
+              <thead><tr><th>Time</th><th>CPU</th><th>Memory</th><th>Storage</th><th>Net down</th><th>Net up</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+      <footer class="page-footer"><span id="errorLabel"></span></footer>
+    </div>
+    <script src="./common.js?v=23"></script>
+    <script src="./server.js?v=13"></script>
+  </body>
+</html>

@@ -1,0 +1,9 @@
+.git
+.gitignore
+.cursor
+dist
+deploy/.env
+**/__pycache__
+**/*.pyc
+**/.DS_Store
+apps/terminal/var

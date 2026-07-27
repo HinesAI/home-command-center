@@ -1,0 +1,5 @@
+# Docker containers shown in the SERVICES panel, one container name per line.
+# jellyfin
+# qbittorrent
+# ollama
+# ragflow

@@ -1,0 +1,23 @@
+{
+  "schemaVersion": "v1",
+  "messageType": "heartbeat",
+  "messageId": "msg_9f8c3a1b",
+  "sentAt": "2026-06-29T17:50:00Z",
+  "agentId": "agent_srv_01",
+  "nodeId": "node_srv_01",
+  "payload": {
+    "hostname": "srv-01",
+    "platform": "linux",
+    "uptimeSec": 88923,
+    "resources": {
+      "cpuPercent": 22.4,
+      "memoryPercent": 58.1,
+      "diskPercent": 71.9
+    },
+    "serviceCounts": {
+      "running": 34,
+      "failed": 1
+    }
+  }
+}
+

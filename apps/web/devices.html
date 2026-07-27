@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HCC | Enrolled Devices</title>
+    <link rel="stylesheet" href="./styles.css?v=23" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="./index.html"><span class="brand-mark">H</span><span><strong>Home Command Center</strong></span></a>
+        <nav id="appNav" class="app-nav"></nav>
+        <div class="session-tools">
+          <span id="authUserLabel" class="user-label"></span>
+          <a id="adminNavLink" href="./admin.html">Admin</a>
+          <button id="logoutBtn" type="button">Logout</button>
+        </div>
+      </header>
+      <main class="dashboard page-grid">
+        <section class="page-title">
+          <div>
+            <p class="eyebrow">Device hub</p>
+            <h1>Enrolled Devices</h1>
+            <p id="devicesLabel">Fleet entry point for servers, clients, and hosts reporting agent telemetry.</p>
+          </div>
+          <div class="section-actions">
+            <a class="button-link" href="./devices-servers.html">All Servers</a>
+            <a class="button-link secondary" href="./devices-clients.html">All Clients</a>
+          </div>
+        </section>
+        <section class="stat-grid">
+          <article class="stat-card"><span>Total enrolled</span><strong id="devicesTotalCount">-</strong><small id="devicesTimeLabel">Updated: -</small></article>
+          <article class="stat-card"><span>Servers</span><strong id="devicesServerCount">-</strong><small>Reporting server agents</small></article>
+          <article class="stat-card"><span>Clients</span><strong id="devicesClientCount">-</strong><small>Workstations and endpoints</small></article>
+          <article class="stat-card"><span>Stale</span><strong id="devicesStaleCount" class="critical-text">-</strong><small>Hosts needing attention</small></article>
+        </section>
+        <nav id="devicesSubNav" class="subnav"></nav>
+        <section class="overview-section">
+          <div class="section-header"><h2>Recent servers</h2></div>
+          <div id="serverCards" class="card-grid"></div>
+        </section>
+        <section class="overview-section">
+          <div class="section-header"><h2>Recent clients</h2></div>
+          <div id="clientCards" class="card-grid"></div>
+        </section>
+      </main>
+      <footer class="page-footer"><span id="errorLabel"></span></footer>
+    </div>
+    <script src="./common.js?v=23"></script>
+    <script src="./devices.js?v=10"></script>
+    <script src="./devices-all.js?v=10"></script>
+  </body>
+</html>

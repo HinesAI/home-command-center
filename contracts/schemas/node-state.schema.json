@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hccv2.local/schemas/node-state.schema.json",
+  "title": "NodeState",
+  "type": "object",
+  "required": [
+    "nodeId",
+    "hostname",
+    "platform",
+    "timestamp",
+    "resources",
+    "services"
+  ],
+  "properties": {
+    "nodeId": {
+      "type": "string"
+    },
+    "hostname": {
+      "type": "string"
+    },
+    "platform": {
+      "type": "string",
+      "enum": ["linux", "windows"]
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "resources": {
+      "type": "object",
+      "required": ["cpuPercent", "memoryPercent", "diskPercent"],
+      "properties": {
+        "cpuPercent": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "memoryPercent": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "diskPercent": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "networkRxBytesPerSec": {
+          "type": "number",
+          "minimum": 0
+        },
+        "networkTxBytesPerSec": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "services": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "status"],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["running", "stopped", "failed", "unknown"]
+          },
+          "uptimeSec": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}
+

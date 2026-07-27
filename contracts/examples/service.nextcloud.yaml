@@ -1,0 +1,20 @@
+id: nextcloud-app
+displayName: Nextcloud Application
+serviceType: docker_container
+statusSource:
+  kind: docker
+  target: nextcloud_app_1
+  pollSeconds: 20
+actions:
+  - id: restart
+    label: Restart container
+    mode: managed
+    allowRoles: [admin, ops]
+    requiresReason: true
+  - id: stop
+    label: Stop container
+    mode: managed
+    allowRoles: [admin]
+    requiresReason: true
+tags: [storage, collaboration]
+

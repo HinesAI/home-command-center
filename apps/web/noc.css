@@ -1,0 +1,78 @@
+/* Host detail page overlays — uses design tokens from styles.css */
+
+.noc-kpi .noc-kpi-value {
+  font-size: 30px;
+  line-height: 0.9;
+}
+
+.noc-kpi-sub {
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.noc-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--ok), var(--cyan));
+}
+
+.noc-bar.warn span {
+  background: linear-gradient(90deg, var(--warn), var(--bad));
+}
+
+.noc-bar.bad span {
+  background: linear-gradient(90deg, var(--bad), #ff8585);
+}
+
+.noc-grid-identity .timeline-row time {
+  min-width: 92px;
+}
+
+.noc-storage-grid {
+  grid-template-columns: 1fr;
+}
+
+.service-card,
+.vm-card-live {
+  padding: 12px;
+  border: 1px solid rgba(29, 42, 60, 0.86);
+  border-radius: var(--radius-sm);
+  background: rgba(6, 11, 18, 0.24);
+}
+
+.noc-empty {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.noc-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(29, 42, 60, 0.86);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.noc-pill .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ok);
+}
+
+.noc-pill.stopped .dot,
+.noc-pill.status-stopped .dot {
+  background: var(--bad);
+}
+
+@media (min-width: 900px) {
+  .noc-storage-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}

@@ -1,0 +1,948 @@
+#!/usr/bin/env bash
+# Collect host status for Home Command Center (physical console dashboard).
+set -euo pipefail
+
+export TZ="${TZ:-America/Chicago}"
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+APP_ROOT="${HCC_TERMINAL_APP_ROOT:-$(cd -- "$SCRIPT_DIR/.." && pwd)}"
+CONFIG_DIR="${HCC_TERMINAL_CONFIG_DIR:-$APP_ROOT/config}"
+# shellcheck source=/dev/null
+[[ -f "$CONFIG_DIR/hcc-terminal.env" ]] && source "$CONFIG_DIR/hcc-terminal.env"
+STATE_DIR="${HCC_TERMINAL_STATE_DIR:-$APP_ROOT/var}"
+mkdir -p "$STATE_DIR"
+
+OUT="${1:-${HCC_STATUS_FILE:-$STATE_DIR/hcc-status.json}}"
+TMP="${OUT}.tmp"
+ROOT="$(dirname "$OUT")"
+PVE_NODES="${HCC_PVE_NODES:-$CONFIG_DIR/hcc-proxmox.nodes}"
+PVE_ENV="${HCC_PVE_ENV:-$CONFIG_DIR/hcc-proxmox.env}"
+NET_TARGETS="${HCC_NET_TARGETS:-$CONFIG_DIR/hcc-network.targets}"
+UNIFI_ENV="${HCC_UNIFI_ENV:-$CONFIG_DIR/hcc-unifi.env}"
+HA_ENV="${HCC_HA_ENV:-$CONFIG_DIR/hcc-homeassistant.env}"
+PVE_API_IP="${HCC_PVE_API_IP:-127.0.0.1}"
+FRIGATE_URL="${HCC_FRIGATE_URL:-http://127.0.0.1:5000}"
+HA_URL="${HCC_HA_URL:-http://127.0.0.1:8123}"
+
+HOSTNAME="$(hostname -s)"
+UPTIME="$(uptime -p 2>/dev/null | sed 's/^up //' || uptime | sed 'n;s/.*,//')"
+LOAD="$(awk '{print $1", "$2", "$3}' /proc/loadavg)"
+MEM="$(free -h | awk '/^Mem:/ {printf "%s used / %s total (%s free)", $3, $2, $4}')"
+KERNEL="$(uname -r)"
+
+# shellcheck source=/dev/null
+[[ -f /etc/os-release ]] && source /etc/os-release
+OS_NAME="${PRETTY_NAME:-Linux}"
+OS_VERSION="${VERSION_ID:-unknown}"
+
+PATCHES_PENDING=0
+PATCHES_SECURITY=0
+if [[ -x /usr/lib/update-notifier/apt-check ]]; then
+	apt_out="$(/usr/lib/update-notifier/apt-check 2>/dev/null || true)"
+	if [[ "$apt_out" =~ ^([0-9]+)\;([0-9]+) ]]; then
+		PATCHES_PENDING="${BASH_REMATCH[1]}"
+		PATCHES_SECURITY="${BASH_REMATCH[2]}"
+	fi
+fi
+if (( PATCHES_PENDING == 0 )) && command -v apt-get >/dev/null 2>&1; then
+	PATCHES_PENDING="$(apt-get -s upgrade 2>/dev/null | grep -c '^Inst' || true)"
+fi
+if (( PATCHES_PENDING == 0 )) && command -v apt >/dev/null 2>&1; then
+	PATCHES_PENDING="$(apt list --upgradable 2>/dev/null | grep -cF 'upgradable from' || true)"
+fi
+
+POOLS_JSON="[]"
+if command -v zpool >/dev/null 2>&1; then
+	POOLS_JSON="$(
+		zpool list -H -o name,health,size,alloc,free 2>/dev/null | while IFS=$'\t' read -r name health size alloc free; do
+			[[ -z "$name" ]] && continue
+			size_gb=$(numfmt --from=iec --to=none "$size" 2>/dev/null | awk '{printf "%.0f", $1/1073741824}' || echo "null")
+			alloc_gb=$(numfmt --from=iec --to=none "$alloc" 2>/dev/null | awk '{printf "%.0f", $1/1073741824}' || echo "null")
+			free_gb=$(numfmt --from=iec --to=none "$free" 2>/dev/null | awk '{printf "%.0f", $1/1073741824}' || echo "null")
+			used_pct="null"
+			if [[ "$size_gb" != "null" && "$alloc_gb" != "null" && "$size_gb" -gt 0 ]]; then
+				used_pct=$(( alloc_gb * 100 / size_gb ))
+			fi
+			printf '{"name":"%s","health":"%s","size_gb":%s,"used_gb":%s,"free_gb":%s,"used_pct":%s},' \
+				"$name" "$health" "${size_gb:-null}" "${alloc_gb:-null}" "${free_gb:-null}" "${used_pct:-null}"
+		done | sed 's/,$//' | awk 'BEGIN{printf"["}{print}{printf"]"}'
+	)"
+fi
+
+DOCKER_JSON="[]"
+if command -v docker >/dev/null 2>&1; then
+	DOCKER_JSON="$(
+		docker ps -a --format '{{.Names}}|{{.Status}}' 2>/dev/null | while IFS='|' read -r name status; do
+			[[ -z "$name" ]] && continue
+			state="stopped"
+			if echo "$status" | grep -qi 'up'; then
+				if echo "$status" | grep -qi '(healthy)'; then
+					state="healthy"
+				elif echo "$status" | grep -qi '(unhealthy)'; then
+					state="unhealthy"
+				elif echo "$status" | grep -qi 'health: starting'; then
+					state="starting"
+				else
+					state="running"
+				fi
+			elif echo "$status" | grep -qi 'restarting'; then
+				state="starting"
+			fi
+			printf '{"name":"%s","state":"%s","detail":"%s"},' "$name" "$state" "$status"
+		done | sed 's/,$//' | awk 'BEGIN{printf"["}{print}{printf"]"}'
+	)"
+fi
+
+SYSTEMD_NAMES=(smbd nmbd winbind docker)
+SERVICES_JSON="[]"
+for svc in "${SYSTEMD_NAMES[@]}"; do
+	state="$(systemctl is-active "$svc" 2>/dev/null || echo "inactive")"
+	SERVICES_JSON="$(echo "$SERVICES_JSON" | jq --arg n "$svc" --arg s "$state" '. + [{"name": $n, "state": $s}]')"
+done
+
+if [[ "$DOCKER_JSON" != "[]" ]]; then
+	SERVICES_JSON="$(echo "$SERVICES_JSON" "$DOCKER_JSON" | jq -s 'add | group_by(.name) | map(.[-1]) | sort_by(.name)')"
+fi
+
+ping_host() {
+	local name="$1"
+	local target="$2"
+	local label="${3:-}"
+	local out latency ok
+	out="$(ping -c 1 -W 1 "$target" 2>/dev/null || true)"
+	if echo "$out" | grep -q 'time='; then
+		latency="$(echo "$out" | sed -n 's/.*time=\([0-9.]*\).*/\1/p' | head -1)"
+		ok="true"
+	else
+		latency="null"
+		ok="false"
+	fi
+	jq -n --arg n "$name" --arg t "$target" --arg l "$label" --argjson ok "$ok" --argjson ms "${latency:-null}" \
+		'{name: $n, target: $t, label: $l, ok: $ok, latency_ms: $ms}'
+}
+
+collect_netinfo() {
+	# Rich LAN / DNS / gateway / VPN summary for NETWORK section.
+	local iface ip_cidr ip_addr speed state duplex mtu
+	local rx_bytes tx_bytes rx_err tx_err rx_drop tx_drop
+	local gw gw_mac dns_ok dns_servers fqdn public_ip tcp_estab
+	local vpn_state vpn_name
+
+	iface="$(ip -4 -o addr show scope global 2>/dev/null | awk '/^[0-9]+: (eno|eth|enp|bond)/ {print $2; exit}')"
+	[[ -z "$iface" ]] && iface="$(ip route show default 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="dev"){print $(i+1); exit}}')"
+	ip_cidr=""; ip_addr=""; speed=""; state="down"; duplex=""; mtu=""
+	rx_bytes=0; tx_bytes=0; rx_err=0; tx_err=0; rx_drop=0; tx_drop=0
+	if [[ -n "$iface" ]]; then
+		ip_cidr="$(ip -4 -o addr show dev "$iface" scope global 2>/dev/null | awk '{print $4; exit}')"
+		ip_addr="${ip_cidr%%/*}"
+		state="$(cat "/sys/class/net/${iface}/operstate" 2>/dev/null || echo unknown)"
+		speed="$(cat "/sys/class/net/${iface}/speed" 2>/dev/null || echo "")"
+		duplex="$(cat "/sys/class/net/${iface}/duplex" 2>/dev/null || echo "")"
+		mtu="$(cat "/sys/class/net/${iface}/mtu" 2>/dev/null || echo "")"
+		rx_bytes="$(cat "/sys/class/net/${iface}/statistics/rx_bytes" 2>/dev/null || echo 0)"
+		tx_bytes="$(cat "/sys/class/net/${iface}/statistics/tx_bytes" 2>/dev/null || echo 0)"
+		rx_err="$(cat "/sys/class/net/${iface}/statistics/rx_errors" 2>/dev/null || echo 0)"
+		tx_err="$(cat "/sys/class/net/${iface}/statistics/tx_errors" 2>/dev/null || echo 0)"
+		rx_drop="$(cat "/sys/class/net/${iface}/statistics/rx_dropped" 2>/dev/null || echo 0)"
+		tx_drop="$(cat "/sys/class/net/${iface}/statistics/tx_dropped" 2>/dev/null || echo 0)"
+	fi
+
+	gw="$(ip -4 route show default 2>/dev/null | awk '{print $3; exit}')"
+	gw_mac=""
+	[[ -n "$gw" ]] && gw_mac="$(ip -4 neigh show "$gw" 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="lladdr"){print $(i+1); exit}}')"
+
+	dns_servers="$(resolvectl dns "$iface" 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i ~ /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/) print $i}' | paste -sd, -)"
+	[[ -z "$dns_servers" ]] && dns_servers="$(awk '/^nameserver/ {print $2}' /etc/resolv.conf 2>/dev/null | grep -v '^127\.' | paste -sd, -)"
+	# Prefer spaced list for display: "a, b, c"
+	dns_servers="$(echo "$dns_servers" | sed 's/,/, /g; s/,  /, /g')"
+
+	local dns_pings="[]" dip dout dlat dok
+	dns_pings="$(
+		echo "$dns_servers" | tr ',' '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | grep -E '^[0-9.]+$' | while read -r dip; do
+			[[ -z "$dip" ]] && continue
+			dout="$(ping -c 1 -W 1 "$dip" 2>/dev/null || true)"
+			if echo "$dout" | grep -q 'time='; then
+				dlat="$(echo "$dout" | sed -n 's/.*time=\([0-9.]*\).*/\1/p' | head -1)"
+				dok="true"
+			else
+				dlat="null"
+				dok="false"
+			fi
+			jq -n --arg ip "$dip" --argjson ok "$dok" --argjson ms "${dlat:-null}" \
+				'{ip: $ip, ok: $ok, latency_ms: $ms}'
+		done | jq -s -c .
+	)"
+	[[ -z "$dns_pings" || "$dns_pings" == "null" ]] && dns_pings="[]"
+
+	dns_ok="false"
+	if getent hosts "${HCC_DNS_TEST_HOST:-example.com}" >/dev/null 2>&1; then
+		dns_ok="true"
+	fi
+
+	fqdn="$(hostname -f 2>/dev/null || hostname 2>/dev/null || echo "")"
+	tcp_estab="$(ss -Htan state established 2>/dev/null | wc -l | tr -d ' ')"
+	[[ -z "$tcp_estab" ]] && tcp_estab=0
+
+	public_ip=""
+	if [[ "${HCC_NET_PUBLIC_IP:-1}" == "1" ]]; then
+		public_ip="$(timeout 1 curl -4 -s --connect-timeout 1 https://api.ipify.org 2>/dev/null || true)"
+		[[ "$public_ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || public_ip=""
+	fi
+
+	# Optional local speedtest cache (written by a separate job; never run live here)
+	local speed_cache="${ROOT}/hcc-speedtest.json" speed_json="null"
+	if [[ -f "$speed_cache" ]] && jq -e . "$speed_cache" >/dev/null 2>&1; then
+		speed_json="$(jq -c '{
+			download_mbps: .download_mbps,
+			upload_mbps: .upload_mbps,
+			latency_ms: .latency_ms,
+			when: (.when // .timestamp // null),
+			source: (.source // "local-cache")
+		}' "$speed_cache" 2>/dev/null || echo null)"
+	fi
+
+	vpn_name="gluetun"
+	vpn_state="$(echo "$SERVICES_JSON" | jq -r --arg n "$vpn_name" '.[] | select(.name==$n) | .state' 2>/dev/null | head -1)"
+	[[ -z "$vpn_state" ]] && vpn_state="missing"
+
+	jq -n \
+		--arg iface "${iface:-}" \
+		--arg ip "${ip_addr:-}" \
+		--arg cidr "${ip_cidr:-}" \
+		--arg state "${state:-}" \
+		--arg speed "${speed:-}" \
+		--arg duplex "${duplex:-}" \
+		--arg mtu "${mtu:-}" \
+		--arg gw "${gw:-}" \
+		--arg gw_mac "${gw_mac:-}" \
+		--arg dns_servers "${dns_servers:-}" \
+		--arg fqdn "${fqdn:-}" \
+		--arg public_ip "${public_ip:-}" \
+		--argjson dns_pings "${dns_pings:-[]}" \
+		--argjson speedtest "${speed_json:-null}" \
+		--argjson rx "${rx_bytes:-0}" \
+		--argjson tx "${tx_bytes:-0}" \
+		--argjson rx_err "${rx_err:-0}" \
+		--argjson tx_err "${tx_err:-0}" \
+		--argjson rx_drop "${rx_drop:-0}" \
+		--argjson tx_drop "${tx_drop:-0}" \
+		--argjson tcp_estab "${tcp_estab:-0}" \
+		--argjson dns_ok "$dns_ok" \
+		--arg vpn_name "$vpn_name" \
+		--arg vpn_state "$vpn_state" \
+		'{
+			iface: $iface,
+			ip: $ip,
+			cidr: $cidr,
+			state: $state,
+			speed_mbps: (if ($speed|test("^[0-9]+$")) then ($speed|tonumber) else null end),
+			duplex: $duplex,
+			mtu: (if ($mtu|test("^[0-9]+$")) then ($mtu|tonumber) else null end),
+			gateway: $gw,
+			gateway_mac: $gw_mac,
+			dns_servers: $dns_servers,
+			dns_pings: $dns_pings,
+			fqdn: $fqdn,
+			public_ip: $public_ip,
+			rx_gb: (($rx / 1073741824 * 10 | floor) / 10),
+			tx_gb: (($tx / 1073741824 * 10 | floor) / 10),
+			rx_errors: $rx_err,
+			tx_errors: $tx_err,
+			rx_dropped: $rx_drop,
+			tx_dropped: $tx_drop,
+			tcp_estab: $tcp_estab,
+			dns_ok: $dns_ok,
+			speedtest: $speedtest,
+			vpn: {name: $vpn_name, state: $vpn_state}
+		}'
+}
+
+tcp_open() {
+	local host=$1 port=$2
+	timeout 1 bash -c "echo >/dev/tcp/${host}/${port}" 2>/dev/null
+}
+
+pve_token_for() {
+	local name=$1
+	local var="HCC_PVE_TOKEN_${name}"
+	[[ -n "${!var:-}" ]] && { printf '%s' "${!var}"; return; }
+	[[ -n "${HCC_PVE_TOKEN:-}" ]] && printf '%s' "$HCC_PVE_TOKEN"
+}
+
+pve_api_get() {
+	local ip=$1 token=$2 path=$3
+	curl -sk --connect-timeout 3 --max-time 6 \
+		-H "Authorization: PVEAPIToken=${token}" \
+		"https://${ip}:8006/api2/json${path}" 2>/dev/null
+}
+
+# Match a configured node name to the cluster node id case-insensitively.
+pve_resolve_node() {
+	local cfg_name=$1 nodes_json=$2
+	jq -r --arg n "${cfg_name,,}" '
+		.data[]? | select((.node | ascii_downcase) == $n) | .node
+	' <<< "$nodes_json" | head -1
+}
+
+collect_proxmox_node() {
+	local name=$1 ip=$2
+	local online="false" ui_ok="false" latency="null"
+	local cpu_pct="null" mem_pct="null"
+	local vms_running="null" vms_total="null" pve_version="null" node_id="null"
+
+	if out="$(ping -c 1 -W 1 "$ip" 2>/dev/null)" && echo "$out" | grep -q 'time='; then
+		online="true"
+		latency="$(echo "$out" | sed -n 's/.*time=\([0-9.]*\).*/\1/p' | head -1)"
+	fi
+	tcp_open "$ip" 8006 && ui_ok="true"
+
+	local token
+	token="$(pve_token_for "$name")"
+	if [[ -n "$token" && "$ui_ok" == "true" ]]; then
+		local resp nodename
+		resp="$(pve_api_get "$ip" "$token" /nodes)"
+		nodename="$(pve_resolve_node "$name" "$resp")"
+		[[ -n "$nodename" ]] && node_id="$nodename"
+
+		resp="$(pve_api_get "$ip" "$token" /version)"
+		if echo "$resp" | jq -e '.data.version' >/dev/null 2>&1; then
+			pve_version="$(echo "$resp" | jq -r '.data.version')"
+		fi
+
+		if [[ -n "$nodename" ]]; then
+			resp="$(pve_api_get "$ip" "$token" "/nodes/${nodename}/status")"
+			if echo "$resp" | jq -e '.data.cpu != null' >/dev/null 2>&1; then
+				cpu_pct="$(echo "$resp" | jq -r '(.data.cpu * 100 | floor)')"
+				local mem_used mem_total
+				mem_used="$(echo "$resp" | jq -r '.data.memory.used')"
+				mem_total="$(echo "$resp" | jq -r '.data.memory.total')"
+				if [[ "$mem_total" != "null" && "$mem_total" -gt 0 ]]; then
+					mem_pct=$(( mem_used * 100 / mem_total ))
+				fi
+			fi
+			vms_running="$(pve_api_get "$ip" "$token" "/nodes/${nodename}/qemu" | jq '[.data[]? | select(.status=="running")] | length' 2>/dev/null || echo null)"
+			vms_total="$(pve_api_get "$ip" "$token" "/nodes/${nodename}/qemu" | jq '.data | length' 2>/dev/null || echo null)"
+			local ct_running=0 ct_total=0
+			ct_running="$(pve_api_get "$ip" "$token" "/nodes/${nodename}/lxc" | jq '[.data[]? | select(.status=="running")] | length' 2>/dev/null || echo 0)"
+			ct_total="$(pve_api_get "$ip" "$token" "/nodes/${nodename}/lxc" | jq '.data | length' 2>/dev/null || echo 0)"
+			if [[ "$vms_running" != "null" && "$vms_running" != "" ]]; then
+				vms_running=$(( vms_running + ct_running ))
+				vms_total=$(( vms_total + ct_total ))
+			fi
+		fi
+	fi
+
+	jq -n \
+		--arg name "$name" \
+		--arg ip "$ip" \
+		--argjson online "$online" \
+		--argjson ui_ok "$ui_ok" \
+		--argjson latency_ms "${latency:-null}" \
+		--argjson cpu_pct "${cpu_pct:-null}" \
+		--argjson mem_pct "${mem_pct:-null}" \
+		--argjson vms_running "${vms_running:-null}" \
+		--argjson vms_total "${vms_total:-null}" \
+		--arg version "${pve_version:-null}" \
+		--arg node "${node_id:-null}" \
+		'{name: $name, ip: $ip, online: $online, ui_ok: $ui_ok, latency_ms: $latency_ms,
+		  cpu_pct: $cpu_pct, mem_pct: $mem_pct, vms_running: $vms_running, vms_total: $vms_total,
+		  version: (if $version == "null" then null else $version end),
+		  node: (if $node == "null" then null else $node end)}'
+}
+
+PROXMOX_JSON="[]"
+if [[ -f "$PVE_ENV" ]]; then
+	# shellcheck source=/dev/null
+	source "$PVE_ENV"
+fi
+if [[ -f "$PVE_NODES" ]]; then
+	while IFS='|' read -r pname pip; do
+		[[ -z "$pname" || "$pname" =~ ^# ]] && continue
+		[[ -z "$pip" ]] && continue
+		entry="$(collect_proxmox_node "$pname" "$pip")"
+		PROXMOX_JSON="$(echo "$PROXMOX_JSON" | jq --argjson e "$entry" '. + [$e]')"
+	done < "$PVE_NODES"
+fi
+
+WORKLOADS_JSON="[]"
+if [[ -f "$PVE_ENV" ]]; then
+	# shellcheck source=/dev/null
+	source "$PVE_ENV"
+fi
+if [[ -n "${HCC_PVE_TOKEN:-}" ]]; then
+	WORKLOADS_JSON="$(
+		pve_api_get "$PVE_API_IP" "$HCC_PVE_TOKEN" '/cluster/resources?type=vm' | jq '
+			[.data[]? | {
+				name: .name,
+				node: .node,
+				status: .status,
+				cpu_pct: ((.cpu // 0) * 100 | floor),
+				mem_pct: (if (.maxmem // 0) > 0 then ((.mem // 0) * 100 / .maxmem | floor) else 0 end),
+				mem_gb: ((.mem // 0) / 1073741824 | floor),
+				maxcpu: (.maxcpu // 0),
+				os: (
+					if (.name | test("Hinesdc"; "i")) then "win"
+					elif (.name | test("Ubuntu|Debian|HAOS|Docker|Frigate|Git|Mainnet|Testnet|Debug|coderepo|HinesAI"; "i")) then "linux"
+					else "vm" end
+				)
+			}]
+			| sort_by(if .status == "running" then 0 else 1 end, .name)
+		' 2>/dev/null || echo '[]'
+	)"
+fi
+
+collect_unifi() {
+	# UniFi OS local login → VLANs/networks, WAN, last speedtest.
+	if [[ ! -f "$UNIFI_ENV" ]]; then
+		jq -n '{ok: false, configured: false, vlans: [], speedtest: null}'
+		return
+	fi
+	# shellcheck source=/dev/null
+	source "$UNIFI_ENV"
+	local host="${HCC_UNIFI_HOST:-192.168.1.1}"
+	local site="${HCC_UNIFI_SITE:-default}"
+	local user pass cookie login
+	local health sys networks speed_raw
+	user="${HCC_UNIFI_USER:-}"
+	pass="${HCC_UNIFI_PASS:-}"
+	[[ -z "$user" || -z "$pass" ]] && {
+		jq -n '{ok: false, configured: false, vlans: [], speedtest: null}'
+		return
+	}
+
+	cookie="$(mktemp)"
+	# shellcheck disable=SC2064
+	trap "rm -f '$cookie'" RETURN
+	login="$(curl -sk -c "$cookie" -b "$cookie" -X POST "https://${host}/api/auth/login" \
+		-H 'Content-Type: application/json' \
+		--connect-timeout 3 --max-time 8 \
+		-d "$(jq -n --arg u "$user" --arg p "$pass" '{username: $u, password: $p}')" 2>/dev/null || true)"
+	if ! echo "$login" | jq -e '(.unique_id // .username // .token) != null' >/dev/null 2>&1; then
+		jq -n '{ok: false, configured: true, error: "login failed", vlans: [], speedtest: null}'
+		return
+	fi
+
+	health="$(curl -sk -b "$cookie" --connect-timeout 3 --max-time 8 \
+		"https://${host}/proxy/network/api/s/${site}/stat/health" 2>/dev/null || true)"
+	sys="$(curl -sk -b "$cookie" --connect-timeout 3 --max-time 8 \
+		"https://${host}/proxy/network/api/s/${site}/stat/sysinfo" 2>/dev/null || true)"
+	networks="$(curl -sk -b "$cookie" --connect-timeout 3 --max-time 8 \
+		"https://${host}/proxy/network/api/s/${site}/rest/networkconf" 2>/dev/null || true)"
+	# UniFi OS speedtest: /speedtest/latest (v2); older builds used /speedtests or health WAN fields
+	speed_raw="$(curl -sk -b "$cookie" --connect-timeout 3 --max-time 8 \
+		"https://${host}/proxy/network/v2/api/site/${site}/speedtest/latest" 2>/dev/null || true)"
+	if ! echo "$speed_raw" | jq -e '.latest.download_mbps // .latest.upload_mbps' >/dev/null 2>&1; then
+		speed_raw="$(curl -sk -b "$cookie" --connect-timeout 3 --max-time 8 \
+			"https://${host}/proxy/network/v2/api/site/${site}/speedtests?limit=1" 2>/dev/null || true)"
+	fi
+	if ! echo "$speed_raw" | jq -e '(.latest.download_mbps // .latest.upload_mbps // .data[0].download // .data[0].download_mbps // .[0].download // empty)' >/dev/null 2>&1; then
+		speed_raw="$(curl -sk -b "$cookie" --connect-timeout 3 --max-time 8 \
+			"https://${host}/proxy/network/api/s/${site}/stat/report/archive.speedtest?interval=3600&attrs=download,upload,latency&start=$(date -d '7 days ago' +%s)000" 2>/dev/null || true)"
+	fi
+
+	local unifi_out
+	unifi_out="$(jq -n \
+		--argjson health "$(echo "$health" | jq -c 'if type=="object" then . else null end' 2>/dev/null || echo null)" \
+		--argjson sys "$(echo "$sys" | jq -c 'if type=="object" then . else null end' 2>/dev/null || echo null)" \
+		--argjson networks "$(echo "$networks" | jq -c 'if type=="object" then . else null end' 2>/dev/null || echo null)" \
+		--argjson speed_raw "$(echo "$speed_raw" | jq -c . 2>/dev/null || echo null)" \
+		'
+		def vlan_rows:
+			[ ($networks.data // [])[]?
+				| select((.purpose // "") != "wan")
+				| select((.vlan_enabled == true) or ((.vlan // null) != null) or ((.purpose // "") == "corporate") or ((.purpose // "") == "guest") or ((.purpose // "") == "vlan-only"))
+				| {
+					name: (.name // "unnamed"),
+					vlan: (if (.vlan|type) == "number" then .vlan
+					       elif ((.vlan // "")|tostring|test("^[0-9]+$")) then ((.vlan|tostring)|tonumber)
+					       else 1 end),
+					subnet: (.ip_subnet // .networkconf_id // ""),
+					gateway: (.dhcpd_ip // .ipv6_interface_id // ""),
+					purpose: (.purpose // "")
+				}
+			]
+			| sort_by(.vlan);
+
+		def speed_from_health:
+			($health.data // [])
+			| map(select(.subsystem == "wan")) | .[0] // {}
+			| if ((.speedtest_download // .xput_down // null) == null and (.speedtest_upload // .xput_up // null) == null)
+			  then null
+			  else {
+				download_mbps: (.speedtest_download // .xput_down // null),
+				upload_mbps: (.speedtest_upload // .xput_up // null),
+				latency_ms: (.speedtest_latency // .latency // null),
+				when: (.speedtest_status // .uptime // null),
+				source: "unifi-health"
+			} end;
+
+		def speed_from_latest:
+			if ($speed_raw|type) != "object" or ($speed_raw.latest // null) == null then null
+			else ($speed_raw.latest) | {
+				download_mbps: (.download_mbps // .download // null),
+				upload_mbps: (.upload_mbps // .upload // null),
+				latency_ms: (.latency_ms // .latency // .ping // null),
+				when: (.time // .timestamp // null),
+				source: "unifi-speedtest"
+			} end;
+
+		def speed_from_v2:
+			if ($speed_raw|type) == "object" and ($speed_raw.latest // null) != null then null
+			else
+			(if ($speed_raw|type) == "array" then $speed_raw
+			 elif ($speed_raw|type) == "object" then ($speed_raw.data // $speed_raw.speedtests // [])
+			 else [] end) as $arr
+			| ($arr|sort_by(.time // .timestamp // 0)|reverse|.[0] // null)
+			| if . == null then null else {
+				download_mbps: (
+					(.download // .download_mbps // .xput_download // null) as $d
+					| if $d == null then null
+					  elif $d > 10000 then ($d / 1000000)
+					  else $d end
+				),
+				upload_mbps: (
+					(.upload // .upload_mbps // .xput_upload // null) as $u
+					| if $u == null then null
+					  elif $u > 10000 then ($u / 1000000)
+					  else $u end
+				),
+				latency_ms: (.latency // .ping // .rtt // null),
+				when: (.time // .timestamp // null),
+				source: "unifi-speedtest"
+			} end
+			end;
+
+		def has_speed($s):
+			$s != null and (($s.download_mbps // null) != null or ($s.upload_mbps // null) != null);
+
+		def norm_speed($s):
+			if $s == null then null
+			else $s | {
+				download_mbps: (if .download_mbps == null then null else ((.download_mbps|tonumber)*10|floor)/10 end),
+				upload_mbps: (if .upload_mbps == null then null else ((.upload_mbps|tonumber)*10|floor)/10 end),
+				latency_ms: (if .latency_ms == null then null else ((.latency_ms|tonumber)*10|floor)/10 end),
+				when: .when,
+				source: .source
+			} end;
+
+		def pick_speed:
+			[ speed_from_latest, speed_from_v2, speed_from_health ]
+			| map(select(has_speed(.))) | .[0] // null;
+
+		{
+			ok: true,
+			configured: true,
+			gateway: ($sys.data[0].name // "UDM"),
+			wan_ip: (($health.data // []) | map(select(.subsystem=="wan")) | .[0].wan_ip // null),
+			vlans: vlan_rows,
+			speedtest: norm_speed(pick_speed)
+		}
+		' 2>/dev/null || jq -n '{ok: false, configured: true, error: "parse failed", vlans: [], speedtest: null}')"
+
+	# Human-readable local time for ms epoch from UniFi
+	local when_raw when_fmt
+	when_raw="$(echo "$unifi_out" | jq -r '.speedtest.when // empty' 2>/dev/null || true)"
+	if [[ "$when_raw" =~ ^[0-9]+$ ]]; then
+		local when_secs="$when_raw"
+		(( ${#when_raw} > 10 )) && when_secs=$((when_raw / 1000))
+		when_fmt="$(date -d "@${when_secs}" '+%b %d %I:%M %p' 2>/dev/null || echo "$when_raw")"
+		unifi_out="$(echo "$unifi_out" | jq --arg w "$when_fmt" '.speedtest.when = $w')"
+	fi
+	echo "$unifi_out"
+}
+
+UNIFI_JSON="$(collect_unifi)"
+
+
+collect_frigate() {
+	local base="$FRIGATE_URL"
+	local stats events host
+	host="${base#*://}"
+	host="${host%%/*}"
+	host="${host%%:*}"
+
+	local online="false" latency="null"
+	if out="$(ping -c 1 -W 1 "$host" 2>/dev/null)" && echo "$out" | grep -q 'time='; then
+		online="true"
+		latency="$(echo "$out" | sed -n 's/.*time=\([0-9.]*\).*/\1/p' | head -1)"
+	fi
+
+	stats="$(curl -sk --connect-timeout 3 --max-time 6 "${base}/api/stats" 2>/dev/null || true)"
+	if ! echo "$stats" | jq -e '.service.version' >/dev/null 2>&1; then
+		jq -n \
+			--arg url "$base" \
+			--argjson online "$online" \
+			--argjson latency_ms "${latency:-null}" \
+			'{ok: false, url: $url, online: $online, latency_ms: $latency_ms}'
+		return
+	fi
+
+	events="$(curl -sk --connect-timeout 3 --max-time 5 "${base}/api/events?limit=6" 2>/dev/null || echo '[]')"
+	events="$(echo "$events" | jq '.' 2>/dev/null || echo '[]')"
+
+	echo "$stats" | jq \
+		--arg url "$base" \
+		--argjson online "$online" \
+		--argjson latency_ms "${latency:-null}" \
+		--argjson recent "$events" \
+		'{
+			ok: true,
+			url: $url,
+			online: $online,
+			latency_ms: $latency_ms,
+			version: .service.version,
+			uptime_sec: (.service.uptime // 0),
+			storage_used_gb: ((.service.storage."/media/frigate/recordings".used // 0) / 1024 | floor),
+			storage_free_gb: ((.service.storage."/media/frigate/recordings".free // 0) / 1024 | floor),
+			storage_pct: (
+				(.service.storage."/media/frigate/recordings".used // 0) as $u
+				| (.service.storage."/media/frigate/recordings".free // 0) as $f
+				| if ($u + $f) > 0 then ($u * 100 / ($u + $f) | floor) else 0 end
+			),
+			gpu: (.gpu_usages | to_entries[0]? | {name: .key, gpu: .value.gpu, mem: .value.mem, dec: .value.dec} // null),
+			inference_ms: (.detectors | to_entries[0].value.inference_speed // null),
+			cameras: [
+				.cameras | to_entries[] | {
+					name: .key,
+					short: (
+						if .key == "FrontLeftCam" then "FrontLeft"
+						elif .key == "FrontRightCam" then "FrontRight"
+						elif .key == "RearCam1" then "Rear1"
+						elif .key == "RearCam2" then "Rear2"
+						else (.key | gsub("Cam$"; ""))
+						end
+					),
+					camera_fps: (.value.camera_fps // 0),
+					detection_fps: (.value.detection_fps // 0),
+					skipped_fps: (.value.skipped_fps // 0),
+					enabled: (.value.detection_enabled // false)
+				}
+			],
+			recent: [
+				$recent[]? | {camera: (.camera | gsub("Cam$"; "")), label: .label}
+			] | unique_by(.camera + .label) | .[0:4]
+		}'
+}
+
+FRIGATE_JSON="$(collect_frigate)"
+
+collect_homeassistant() {
+	if [[ ! -f "$HA_ENV" ]]; then
+		jq -n '{ok: false, configured: false, doors: [], thermostats: []}'
+		return
+	fi
+	# shellcheck source=/dev/null
+	source "$HA_ENV"
+	local token="${HCC_HA_TOKEN:-}"
+	local url="${HCC_HA_URL:-$HA_URL}"
+	if [[ -z "$token" ]]; then
+		jq -n '{ok: false, configured: false, doors: [], thermostats: []}'
+		return
+	fi
+
+	local states config version doors thermostats
+	states="$(curl -sk --connect-timeout 3 --max-time 8 \
+		-H "Authorization: Bearer ${token}" \
+		-H "Content-Type: application/json" \
+		"${url}/api/states" 2>/dev/null || true)"
+	if ! echo "$states" | jq -e 'type == "array"' >/dev/null 2>&1; then
+		jq -n '{ok: false, configured: true, error: "api failed", doors: [], thermostats: []}'
+		return
+	fi
+
+	config="$(curl -sk --connect-timeout 3 --max-time 5 \
+		-H "Authorization: Bearer ${token}" \
+		"${url}/api/config" 2>/dev/null || true)"
+	version="$(echo "$config" | jq -r '.version // null' 2>/dev/null || echo null)"
+
+	doors="$(echo "$states" | jq '
+		[.[] | select(
+			(
+				(.entity_id | startswith("binary_sensor."))
+				and ((.attributes.device_class // "") | test("^(door|opening|garage)$"))
+				and (.entity_id | test("battery|firmware|identify|_opening$") | not)
+				and ((.attributes.friendly_name // "") | test("Battery|Firmware|Identify"; "i") | not)
+			)
+			or (
+				(.entity_id | startswith("cover."))
+				and ((.attributes.device_class // "") | test("^(door|garage|gate)$"))
+			)
+			or (.entity_id | startswith("lock."))
+		) | {
+			entity: .entity_id,
+			name: ((.attributes.friendly_name // .entity_id) | gsub("\\s+$"; "")),
+			state: (
+				if .state == "off" then "closed"
+				elif .state == "on" then "open"
+				else .state end
+			)
+		}] | sort_by(.name)
+	' 2>/dev/null || echo '[]')"
+
+	# Thermostats (climate.* entities) - capture current/target temp + hvac action/mode + humidity when available.
+	thermostats="$(echo "$states" | jq '
+		[.[] | select(.entity_id | startswith("climate."))
+			| {
+				entity: .entity_id,
+				name: (
+					# Better labels: if it is a Sensi thermostat, force a clear label.
+					if (.entity_id | test("^climate\\.sensi_")) then
+						((.attributes.friendly_name // .entity_id) | gsub("\\s+$"; ""))
+						| (if (. | ascii_downcase | test("sensi")) then . else ("Sensi " + .) end)
+					else
+						((.attributes.friendly_name // .entity_id) | gsub("\\s+$"; ""))
+					end
+				),
+				state: .state,
+				hvac_action: (.attributes.hvac_action // ""),
+				hvac_mode: (.attributes.hvac_mode // ""),
+				current_temp: (.attributes.current_temperature // null),
+				target_temp: (.attributes.temperature // null),
+				unit: ((.attributes.temperature_unit // "") | gsub("°"; "")),
+				current_humidity: (.attributes.current_humidity // null),
+				target_humidity: ((.attributes.target_humidity // .attributes.humidity // null))
+			}
+		] | sort_by(.name)
+	' 2>/dev/null || echo '[]')"
+
+	jq -n \
+		--argjson doors "$doors" \
+		--argjson thermostats "$thermostats" \
+		--arg version "${version:-null}" \
+		'{ok: true, configured: true,
+		  version: (if $version == "null" or $version == "" then null else $version end),
+		  doors: $doors,
+		  thermostats: $thermostats}'
+}
+
+HA_JSON="$(collect_homeassistant)"
+
+collect_weather() {
+	# 7-day strip from Home Assistant weather.get_forecasts (daily).
+	if [[ ! -f "$HA_ENV" ]]; then
+		jq -n '{ok: false, configured: false, forecast: []}'
+		return
+	fi
+	# shellcheck source=/dev/null
+	source "$HA_ENV"
+	local token="${HCC_HA_TOKEN:-}"
+	local url="${HCC_HA_URL:-$HA_URL}"
+	local entity="${HCC_HA_WEATHER_ENTITY:-weather.forecast_home}"
+	if [[ -z "$token" ]]; then
+		jq -n '{ok: false, configured: false, forecast: []}'
+		return
+	fi
+
+	local state_json fc_json
+	state_json="$(curl -sk --connect-timeout 3 --max-time 6 \
+		-H "Authorization: Bearer ${token}" \
+		-H "Content-Type: application/json" \
+		"${url}/api/states/${entity}" 2>/dev/null || true)"
+	fc_json="$(curl -sk --connect-timeout 3 --max-time 8 \
+		-H "Authorization: Bearer ${token}" \
+		-H "Content-Type: application/json" \
+		-d "$(jq -n --arg e "$entity" '{entity_id: $e, type: "daily"}')" \
+		"${url}/api/services/weather/get_forecasts?return_response" 2>/dev/null || true)"
+
+	if ! echo "$state_json" | jq -e '.entity_id' >/dev/null 2>&1; then
+		jq -n --arg e "$entity" '{ok: false, configured: true, entity: $e, error: "state failed", forecast: []}'
+		return
+	fi
+
+	echo "$state_json" "$fc_json" | jq -s --arg e "$entity" '
+		.[0] as $s | .[1] as $r |
+		($r.service_response[$e].forecast // $r.service_response[$s.entity_id].forecast // []) as $fc |
+		{
+			ok: true,
+			configured: true,
+			entity: $e,
+			condition: ($s.state // ""),
+			temperature: ($s.attributes.temperature // null),
+			humidity: ($s.attributes.humidity // null),
+			wind_speed: ($s.attributes.wind_speed // null),
+			unit: (($s.attributes.temperature_unit // "°F") | gsub("°"; "")),
+			forecast: (
+				$fc[0:7] | map({
+					datetime: (.datetime // ""),
+					condition: (.condition // ""),
+					high: (.temperature // null),
+					low: (.templow // null),
+					humidity: (.humidity // null),
+					precipitation: (.precipitation // null),
+					wind_speed: (.wind_speed // null),
+					wind_bearing: (.wind_bearing // null)
+				})
+			)
+		}
+	' 2>/dev/null || jq -n --arg e "$entity" '{ok: false, configured: true, entity: $e, error: "parse failed", forecast: []}'
+}
+
+WEATHER_JSON="$(collect_weather)"
+
+collect_ai() {
+	# Ollama + RAGFlow snapshot for dashboard AI box.
+	local ollama_url rag_url rag_key
+	ollama_url="${HCC_OLLAMA_URL:-http://127.0.0.1:11434}"
+	rag_url="${HCC_RAGFLOW_URL:-http://127.0.0.1:9380}"
+	rag_key="${HCC_RAGFLOW_API_KEY:-}"
+	local rag_token_file="${HCC_RAGFLOW_API_TOKEN_FILE:-}"
+	if [[ -z "$rag_key" && -n "$rag_token_file" && -r "$rag_token_file" ]]; then
+		rag_key="$(tr -d '\n' <"$rag_token_file")"
+	fi
+	if [[ -f "${CONFIG_DIR}/hcc-ai.env" ]]; then
+		# shellcheck source=/dev/null
+		source "${CONFIG_DIR}/hcc-ai.env"
+		ollama_url="${HCC_OLLAMA_URL:-$ollama_url}"
+		rag_url="${HCC_RAGFLOW_URL:-$rag_url}"
+		rag_key="${HCC_RAGFLOW_API_KEY:-$rag_key}"
+	fi
+
+	local tags_json ps_json health_json datasets_json gpu_json
+	tags_json="$(curl -s --connect-timeout 2 --max-time 5 "${ollama_url}/api/tags" 2>/dev/null || echo '{}')"
+	ps_json="$(curl -s --connect-timeout 2 --max-time 5 "${ollama_url}/api/ps" 2>/dev/null || echo '{}')"
+	health_json="$(curl -s --connect-timeout 2 --max-time 5 "${rag_url}/api/v1/system/healthz" 2>/dev/null \
+		|| curl -s --connect-timeout 2 --max-time 5 "${rag_url}/v1/system/healthz" 2>/dev/null \
+		|| echo '{}')"
+	if [[ -n "$rag_key" ]]; then
+		datasets_json="$(curl -s --connect-timeout 2 --max-time 8 \
+			-H "Authorization: Bearer ${rag_key}" \
+			"${rag_url}/api/v1/datasets?page=1&page_size=20" 2>/dev/null || echo '{}')"
+	else
+		datasets_json='{}'
+	fi
+	gpu_json="$(nvidia-smi --query-gpu=name,utilization.gpu,memory.used,memory.total --format=csv,noheader,nounits 2>/dev/null \
+		| head -1 \
+		| awk -F',' '{gsub(/^ +| +$/,"",$1); gsub(/^ +| +$/,"",$2); gsub(/^ +| +$/,"",$3); gsub(/^ +| +$/,"",$4);
+			printf "{\"name\": \"%s\", \"util_pct\": %s, \"mem_used_mib\": %s, \"mem_total_mib\": %s}", $1, ($2==""?"0":$2), ($3==""?"0":$3), ($4==""?"0":$4)}' \
+		|| echo 'null')"
+
+	jq -n \
+		--argjson tags "$tags_json" \
+		--argjson ps "$ps_json" \
+		--argjson health "$health_json" \
+		--argjson datasets "$datasets_json" \
+		--argjson gpu "${gpu_json:-null}" \
+		'
+		($tags.models // []) as $models |
+		($ps.models // []) as $loaded |
+		($datasets.data // []) as $ds |
+		{
+			ollama: {
+				ok: (($models | length) > 0 or ($loaded | length) > 0),
+				model_count: ($models | length),
+				loaded: [ $loaded[] | {
+					name: (.name // .model // "?"),
+					size_vram_mb: (((.size_vram // 0) / 1048576) | floor)
+				} ],
+				gpu: $gpu
+			},
+			ragflow: {
+				ok: (($health.status // "") == "ok"),
+				status: ($health.status // "down"),
+				db: ($health.db // null),
+				doc_engine: ($health.doc_engine // null),
+				redis: ($health.redis // null),
+				storage: ($health.storage // null),
+				datasets: [ $ds[] | {
+					name: (.name // "?"),
+					document_count: (.document_count // 0),
+					chunk_count: (.chunk_count // 0),
+					chunk_method: (.chunk_method // "")
+				} ]
+			}
+		}
+		' 2>/dev/null || jq -n '{ollama:{ok:false,model_count:0,loaded:[],gpu:null},ragflow:{ok:false,status:"down",datasets:[]}}'
+}
+
+AI_JSON="$(collect_ai)"
+
+# Rolling CPU/RAM samples per Proxmox node (last 10 collects)
+HISTORY_FILE="${ROOT}/hcc-pve-history.json"
+PVE_HISTORY_JSON="$(
+	if [[ -f "$HISTORY_FILE" ]] && jq -e . "$HISTORY_FILE" >/dev/null 2>&1; then
+		jq -s --argjson nodes "$PROXMOX_JSON" '
+			(.[0] // {}) as $h |
+			reduce $nodes[] as $n ($h;
+				.[($n.name)].cpu = (
+					(.[($n.name)].cpu // []) + [($n.cpu_pct // 0)]
+					| map(tonumber) | .[-10:]
+				)
+				| .[($n.name)].mem = (
+					(.[($n.name)].mem // []) + [($n.mem_pct // 0)]
+					| map(tonumber) | .[-10:]
+				)
+			)
+		' "$HISTORY_FILE"
+	else
+		jq -n --argjson nodes "$PROXMOX_JSON" '
+			reduce $nodes[] as $n ({};
+				.[($n.name)] = {cpu: [($n.cpu_pct // 0)], mem: [($n.mem_pct // 0)]}
+			)
+		'
+	fi
+)"
+printf '%s\n' "$PVE_HISTORY_JSON" > "$HISTORY_FILE"
+
+NET_JSON="["
+first=1
+if [[ -f "$NET_TARGETS" ]]; then
+	while IFS='|' read -r nname ntarget nlabel; do
+		[[ -z "$nname" || "$nname" =~ ^# ]] && continue
+		[[ -z "$ntarget" ]] && continue
+		(( first )) || NET_JSON+=","
+		first=0
+		NET_JSON+="$(ping_host "$nname" "$ntarget" "${nlabel:-}")"
+	done < "$NET_TARGETS"
+else
+	default_gateway="$(ip -4 route show default 2>/dev/null | awk '{print $3; exit}')"
+	if [[ -n "$default_gateway" ]]; then
+		NET_JSON+="$(ping_host gateway "$default_gateway" "Gateway"),"
+	fi
+	NET_JSON+="$(ping_host internet 1.1.1.1 "Internet")"
+fi
+NET_JSON+="]"
+# Ensure valid JSON array even if a ping_host failed oddly
+NET_JSON="$(echo "$NET_JSON" | jq -c . 2>/dev/null || echo '[]')"
+
+NETINFO_JSON="$(collect_netinfo)"
+
+IPS_JSON="$(ip -4 -o addr show scope global 2>/dev/null | awk '{print $2": "$4}' | jq -R -s 'split("\n") | map(select(length>0))' 2>/dev/null || echo '[]')"
+
+UPDATED="$(date '+%Y-%m-%d %I:%M:%S %p')"
+
+jq -n \
+	--arg hostname "$HOSTNAME" \
+	--arg uptime "$UPTIME" \
+	--arg load "$LOAD" \
+	--arg memory "$MEM" \
+	--arg kernel "$KERNEL" \
+	--arg os_name "$OS_NAME" \
+	--arg os_version "$OS_VERSION" \
+	--arg updated "$UPDATED" \
+	--argjson patches_pending "$PATCHES_PENDING" \
+	--argjson patches_security "$PATCHES_SECURITY" \
+	--argjson storage "$(jq -n --argjson pools "$POOLS_JSON" '{pools: $pools}')" \
+	--argjson services "$SERVICES_JSON" \
+	--argjson network "$NET_JSON" \
+	--argjson netinfo "$NETINFO_JSON" \
+	--argjson proxmox "$PROXMOX_JSON" \
+	--argjson workloads "$WORKLOADS_JSON" \
+	--argjson unifi "$UNIFI_JSON" \
+	--argjson frigate "$FRIGATE_JSON" \
+	--argjson homeassistant "$HA_JSON" \
+	--argjson weather "$WEATHER_JSON" \
+	--argjson ai "$AI_JSON" \
+	--argjson pve_history "$PVE_HISTORY_JSON" \
+	--argjson ips "$IPS_JSON" \
+	'{hostname: $hostname, uptime: $uptime, load: $load, memory: $memory, kernel: $kernel,
+	  os: {name: $os_name, version: $os_version},
+	  patches: {pending: $patches_pending, security: $patches_security},
+	  updated: $updated, storage: $storage, services: $services, network: $network,
+	  netinfo: $netinfo,
+	  proxmox: $proxmox, workloads: $workloads, unifi: $unifi, frigate: $frigate,
+	  homeassistant: $homeassistant, weather: $weather, ai: $ai,
+	  pve_history: $pve_history, ips: $ips}' \
+	> "$TMP"
+
+chmod 644 "$TMP"
+mv "$TMP" "$OUT"

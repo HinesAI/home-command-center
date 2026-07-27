@@ -1,0 +1,17 @@
+{
+	auto_https off
+	admin off
+}
+
+:80 {
+	encode zstd gzip
+
+	@core path /api/* /healthz
+	handle @core {
+		reverse_proxy core:8080
+	}
+
+	handle {
+		reverse_proxy web:80
+	}
+}

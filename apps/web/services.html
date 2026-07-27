@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HCC | Services</title>
+    <link rel="stylesheet" href="./styles.css?v=23" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="./index.html"><span class="brand-mark">H</span><span><strong>Home Command Center</strong></span></a>
+        <nav id="appNav" class="app-nav"></nav>
+        <div class="session-tools">
+          <span id="authUserLabel" class="user-label"></span>
+          <a id="adminNavLink" href="./admin.html">Admin</a>
+          <button id="logoutBtn" type="button">Logout</button>
+        </div>
+      </header>
+      <main class="dashboard page-grid">
+        <section class="page-title">
+          <div><p class="eyebrow">Fleet operations</p><h1>Services</h1><p id="servicesLabel">Monitored services across Windows and Linux hosts.</p></div>
+          <span class="status-pill ok" id="servicesPageStatus">-</span>
+        </section>
+        <section class="stat-grid">
+          <article class="stat-card"><span>Total</span><strong id="serviceTotalCount">-</strong><small id="servicesTimeLabel">Updated: -</small></article>
+          <article class="stat-card"><span>Running</span><strong id="serviceRunningCount">-</strong><small>Healthy services</small></article>
+          <article class="stat-card"><span>Stopped</span><strong id="serviceStoppedCount" class="critical-text">-</strong><small>Needs attention</small></article>
+          <article class="stat-card"><span>Hosts</span><strong id="serviceHostCount">-</strong><small id="serviceStaleHostCount">- stale</small></article>
+        </section>
+        <section class="overview-section">
+          <div class="section-header">
+            <h2>Service inventory</h2>
+            <div id="actionStatus" class="action-status"></div>
+          </div>
+          <div class="filter-row-live">
+            <label class="filter-field"><span>Status</span><select id="filterStatus"><option value="all">All</option><option value="running">Running</option><option value="stopped">Stopped</option><option value="starting">Starting</option></select></label>
+            <label class="filter-field"><span>Host</span><select id="filterHost"><option value="all">All hosts</option></select></label>
+            <label class="filter-field"><span>Platform</span><select id="filterPlatform"><option value="all">All platforms</option><option value="windows">Windows</option><option value="linux">Linux</option></select></label>
+            <label class="filter-field"><span>View</span><select id="filterView"><option value="table">Table</option><option value="grouped">Group by service</option></select></label>
+          </div>
+          <div id="groupedServicesView" class="grouped-services hidden-panel"></div>
+          <div class="table-wrap" id="servicesTableWrap">
+            <table id="serviceTable" class="fleet-table">
+              <thead><tr><th>Service</th><th>Status</th><th>Host</th><th>Platform</th><th>Host role</th><th>Host state</th><th>Actions</th></tr></thead>
+              <tbody id="serviceTableBody"><tr><td colspan="7" class="empty-state">Loading services...</td></tr></tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+      <footer class="page-footer"><span id="errorLabel"></span></footer>
+    </div>
+    <script src="./common.js?v=23"></script>
+    <script src="./services.js?v=12"></script>
+  </body>
+</html>

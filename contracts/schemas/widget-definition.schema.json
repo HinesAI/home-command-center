@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hccv2.local/schemas/widget-definition.schema.json",
+  "title": "WidgetDefinition",
+  "type": "object",
+  "required": ["id", "title", "category", "dataQuery", "defaultSize"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9\\-\\.]+$"
+    },
+    "title": {
+      "type": "string"
+    },
+    "category": {
+      "type": "string",
+      "enum": ["fleet", "services", "alerts", "storage", "network", "custom"]
+    },
+    "description": {
+      "type": "string"
+    },
+    "dataQuery": {
+      "type": "string",
+      "description": "Named core query key resolved server-side."
+    },
+    "defaultSize": {
+      "type": "string",
+      "enum": ["sm", "md", "lg"]
+    },
+    "refreshSeconds": {
+      "type": "integer",
+      "minimum": 5,
+      "maximum": 3600,
+      "default": 30
+    },
+    "supportedFilters": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": false
+}
+

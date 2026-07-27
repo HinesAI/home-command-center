@@ -1,0 +1,95 @@
+{
+  "webBaseUrl": "http://hcc.web-flip.local/downloads",
+  "platforms": {
+    "windows": {
+      "latest": "1.0.9",
+      "versions": {
+        "1.0.0": {
+          "label": "Initial gMSA rollout",
+          "packageUrl": "http://hcc.web-flip.local/downloads/hcc-agent-windows.zip",
+          "sha256": ""
+        },
+        "1.0.1": {
+          "label": "Storage fix, service controls, self-update",
+          "packageUrl": "http://hcc.web-flip.local/downloads/hcc-agent-windows.zip",
+          "sha256": "06b2cc38538b910ac40818429fd2c2edbf25e89100f9cf4bff88cbd49f456886"
+        },
+        "1.0.2": {
+          "label": "Storage collection fix for gMSA on Server Core",
+          "packageUrl": "http://hcc.web-flip.local/downloads/hcc-agent-windows.zip",
+          "sha256": "addd7a195443d4434c59e7e714eb2cf48447e3ef604fed5e6508bf83cc207157"
+        },
+        "1.0.3": {
+          "label": "Repeating scheduled task heartbeat every 2 minutes",
+          "packageUrl": "http://hcc.web-flip.local/downloads/hcc-agent-windows.zip",
+          "sha256": "47f4be43288eb9c09bb0cfb9469095891155895660efeec95c266d23e8a0e9b8"
+        },
+        "1.0.4": {
+          "label": "Daemon agent loop with exponential backoff and core-restart recovery",
+          "packageUrl": "http://hcc.web-flip.local/downloads/hcc-agent-windows.zip",
+          "sha256": "f9f5ec84cbd246f305983b743a2a8fc9ee99a0af5a0c08aa5a5b3fde56db5c54"
+        },
+        "1.0.5": {
+          "label": "Windows Service supervisor (replaces scheduled tasks)",
+          "packageUrl": "http://hcc.web-flip.local/downloads/hcc-agent-windows.zip",
+          "sha256": "c8f810d64626e6b1fba0fcb372042a3d79258ff70047233e76144e7fc5f7d4e0"
+        },
+        "1.0.6": {
+          "label": "WinSW service wrapper for reliable daemon under gMSA",
+          "packageUrl": "http://hcc.web-flip.local/downloads/hcc-agent-windows.zip",
+          "sha256": "2fb69e31f56fa9fc47ad11d86bb9a33178a663097fd43fa401456379279716b4"
+        },
+        "1.0.7": {
+          "label": "Enumerate all OS services; simplified installer",
+          "packageUrl": "http://hcc.web-flip.local/downloads/hcc-agent-windows.zip",
+          "sha256": "d48d40a709a9f36e6ad6958f434e5cb36b8b21425cce8ffd64b6bc12637d90de"
+        },
+        "1.0.8": {
+          "label": "Self-update without service re-register; admin update visibility",
+          "packageUrl": "http://hcc.web-flip.local/downloads/hcc-agent-windows.zip",
+          "sha256": "2f9b65ce2f363181c0299200e3cd3772ae1d567324bbc0080bc97a3db8591611"
+        },
+        "1.0.9": {
+          "label": "Detached apply-update helper (stop/install/start)",
+          "packageUrl": "http://hcc.web-flip.local/downloads/hcc-agent-windows.zip",
+          "sha256": "9a650b31b0edd4b2e0685b963f8f90ffad24fc34207ef53b53ea86246939677c"
+        }
+      }
+    },
+    "linux": {
+      "latest": "1.0.5",
+      "versions": {
+        "1.0.0": {
+          "label": "Baseline Linux agent",
+          "packageUrl": "http://hcc.web-flip.local/downloads/hcc-agent-linux.tar.gz",
+          "sha256": ""
+        },
+        "1.0.1": {
+          "label": "Self-update and admin push support",
+          "packageUrl": "http://hcc.web-flip.local/downloads/hcc-agent-linux.tar.gz",
+          "sha256": "4675ccc5c5a33ff9c533b8c757f7a86e6b7786431307c6debc06689e1e9b0ffe"
+        },
+        "1.0.2": {
+          "label": "Agent logging, exponential backoff, env-based service allowlist",
+          "packageUrl": "http://hcc.web-flip.local/downloads/hcc-agent-linux.tar.gz",
+          "sha256": "07e6f75c8588296bfda71bba77e59c8d03922b75e85a5847a2eee4fb6a2c8c3b"
+        },
+        "1.0.3": {
+          "label": "Enumerate all systemd services on each host",
+          "packageUrl": "http://hcc.web-flip.local/downloads/hcc-agent-linux.tar.gz",
+          "sha256": "55fdbb5ee9e3319c349efeda9d77a40420539e6dd7db2c2c83c8a11f583a4cc5"
+        },
+        "1.0.4": {
+          "label": "Detached restart self-update; admin update visibility",
+          "packageUrl": "http://hcc.web-flip.local/downloads/hcc-agent-linux.tar.gz",
+          "sha256": "04e3e7ddbd53dcfe7d4fed403b923caca562edc454a9e53b60acd6d7d5391c19"
+        },
+        "1.0.5": {
+          "label": "Detached apply-update helper (stop/install/start)",
+          "packageUrl": "http://hcc.web-flip.local/downloads/hcc-agent-linux.tar.gz",
+          "sha256": "79cba429b535eb317888dcceca69ab070f9fca94bf3035188edace9ed8c3a59c"
+        }
+      }
+    }
+  }
+}

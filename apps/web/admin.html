@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HCC | Admin</title>
+    <link rel="stylesheet" href="./styles.css?v=24" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="./index.html"><span class="brand-mark">H</span><span><strong>Home Command Center</strong></span></a>
+        <nav id="appNav" class="app-nav"></nav>
+        <div class="session-tools">
+          <span id="authUserLabel" class="user-label"></span>
+          <a id="adminNavLink" class="active" href="./admin.html">Admin</a>
+          <button id="logoutBtn" type="button">Logout</button>
+        </div>
+      </header>
+      <main class="dashboard page-grid">
+        <section class="page-title">
+          <div><p class="eyebrow">Maintainer</p><h1>Admin</h1><p>Agent releases, inventory health, and maintainer-only operations.</p></div>
+          <span class="status-pill" id="adminUserPill">Signed in</span>
+        </section>
+        <section class="overview-section">
+          <div class="section-header"><h2>Published releases</h2></div>
+          <div id="releaseCards" class="release-cards"></div>
+        </section>
+        <section class="overview-section">
+          <div class="section-header"><h2>Push agent update</h2><span class="status-pill warn">Queued on heartbeat</span></div>
+          <div class="admin-controls">
+            <label class="filter-field">Platform<select id="filterPlatform"><option value="all">All platforms</option><option value="windows">Windows</option><option value="linux">Linux</option></select></label>
+            <label class="filter-field">Group<select id="filterGroup"><option value="all">All hosts</option><option value="servers">Servers</option><option value="clients">Clients</option></select></label>
+            <label class="filter-field">Version<select id="targetVersion"><option value="">Latest per platform</option></select></label>
+            <label class="admin-check"><input id="onlyOutdated" type="checkbox" checked /> Only outdated hosts</label>
+            <label class="admin-check"><input id="excludeStale" type="checkbox" checked /> Skip stale hosts</label>
+            <button id="applyFiltersBtn" type="button" class="action-button secondary">Apply filters</button>
+          </div>
+          <div class="admin-actions">
+            <button id="pushFilteredBtn" type="button" class="action-button">Push to filtered hosts</button>
+            <button id="pushSelectedBtn" type="button" class="action-button warn">Push to selected hosts</button>
+          </div>
+          <div id="pushStatus" class="admin-status"></div>
+        </section>
+        <section class="overview-section">
+          <div class="section-header"><h2>Update activity</h2><span id="updateLogSummary" class="status-pill">-</span></div>
+          <p class="section-note">Queued updates run on the agent&apos;s next heartbeat. Status persists across core restarts.</p>
+          <div class="table-wrap">
+            <table class="fleet-table">
+              <thead><tr><th>Host</th><th>Target</th><th>Status</th><th>When</th><th>Message</th><th>Request</th></tr></thead>
+              <tbody id="updateLogBody"></tbody>
+            </table>
+          </div>
+        </section>
+        <section class="overview-section">
+          <div class="section-header"><h2>Agent inventory</h2><span id="inventorySummary" class="status-pill">-</span></div>
+          <div class="table-wrap">
+            <table class="fleet-table">
+              <thead><tr><th><input id="selectAllHosts" type="checkbox" /></th><th>Host</th><th>Platform</th><th>Role</th><th>Current</th><th>Latest</th><th>Version</th><th>Update</th></tr></thead>
+              <tbody id="inventoryBody"></tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+      <footer class="page-footer"><span id="errorLabel"></span></footer>
+    </div>
+    <script src="./common.js?v=24"></script>
+    <script src="./admin.js?v=12"></script>
+  </body>
+</html>

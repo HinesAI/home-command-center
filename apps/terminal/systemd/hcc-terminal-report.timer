@@ -1,0 +1,11 @@
+[Unit]
+Description=Send the HCC Terminal daily report
+
+[Timer]
+OnCalendar=*-*-* 07:00:00
+Persistent=true
+RandomizedDelaySec=5m
+AccuracySec=1m
+
+[Install]
+WantedBy=timers.target

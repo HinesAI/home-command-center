@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hccv2.local/schemas/agent-envelope.schema.json",
+  "title": "AgentEnvelope",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "messageType",
+    "messageId",
+    "sentAt",
+    "agentId",
+    "nodeId",
+    "payload"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "pattern": "^v[0-9]+$"
+    },
+    "messageType": {
+      "type": "string",
+      "enum": ["heartbeat", "state_update", "action_result", "log_batch"]
+    },
+    "messageId": {
+      "type": "string",
+      "minLength": 8
+    },
+    "sentAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "agentId": {
+      "type": "string",
+      "minLength": 3
+    },
+    "nodeId": {
+      "type": "string",
+      "minLength": 3
+    },
+    "correlationId": {
+      "type": "string"
+    },
+    "payload": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": false
+}
+

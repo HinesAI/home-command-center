@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HCC | Virtual Machines</title>
+    <link rel="stylesheet" href="./styles.css?v=23" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="./index.html"><span class="brand-mark">H</span><span><strong>Home Command Center</strong></span></a>
+        <nav id="appNav" class="app-nav"></nav>
+        <div class="session-tools">
+          <span id="authUserLabel" class="user-label"></span>
+          <a id="adminNavLink" href="./admin.html">Admin</a>
+          <button id="logoutBtn" type="button">Logout</button>
+        </div>
+      </header>
+      <main class="dashboard page-grid">
+        <section class="page-title">
+          <div><p class="eyebrow">Proxmox fleet</p><h1>Virtual Machines</h1><p id="vmsLabel">VM inventory across hypervisors with allowlisted lifecycle controls.</p></div>
+          <span class="status-pill ok" id="vmsPageStatus">-</span>
+        </section>
+        <section class="stat-grid">
+          <article class="stat-card"><span>Total VMs</span><strong id="vmTotalCount">-</strong><small id="vmsTimeLabel">Updated: -</small></article>
+          <article class="stat-card"><span>Running</span><strong id="vmRunningCount">-</strong><small>Active workloads</small></article>
+          <article class="stat-card"><span>Stopped</span><strong id="vmStoppedCount" class="critical-text">-</strong><small>Start actions available</small></article>
+          <article class="stat-card"><span>Hypervisors</span><strong id="vmHostCount">-</strong><small id="vmStaleHostCount">- stale</small></article>
+        </section>
+        <section class="overview-section">
+          <div class="section-header">
+            <h2>VM inventory</h2>
+            <div id="actionStatus" class="action-status"></div>
+          </div>
+          <div class="filter-row-live">
+            <label class="filter-field"><span>Status</span><select id="filterStatus"><option value="all">All</option><option value="running">Running</option><option value="stopped">Stopped</option><option value="paused">Paused</option></select></label>
+            <label class="filter-field"><span>Type</span><select id="filterType"><option value="all">All</option><option value="qemu">QEMU</option><option value="lxc">LXC</option></select></label>
+            <label class="filter-field"><span>Host</span><select id="filterHost"><option value="all">All hypervisors</option></select></label>
+          </div>
+          <div class="table-wrap">
+            <table id="vmTable" class="fleet-table">
+              <thead><tr><th>Name</th><th>ID</th><th>Type</th><th>OS</th><th>Status</th><th>Memory</th><th>Disk</th><th>PID</th><th>Host</th><th>Host State</th><th>Actions</th></tr></thead>
+              <tbody id="vmTableBody"><tr><td colspan="11" class="empty-state">Loading virtual machines...</td></tr></tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+      <footer class="page-footer"><span id="errorLabel"></span></footer>
+    </div>
+    <script src="./common.js?v=23"></script>
+    <script src="./vms.js?v=10"></script>
+  </body>
+</html>

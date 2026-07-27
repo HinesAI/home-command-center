@@ -1,0 +1,17 @@
+[Unit]
+Description=HCCv2 Linux heartbeat agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/hcc-agent
+EnvironmentFile=-/etc/hcc-agent.env
+ExecStart=/usr/bin/python3 /opt/hcc-agent/heartbeat_sender.py
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+

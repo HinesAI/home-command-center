@@ -1,0 +1,26 @@
+items:
+  - id: fleet.overview
+    title: Fleet Overview
+    category: fleet
+    description: Healthy, warning, and critical node counters.
+    dataQuery: fleet_overview
+    defaultSize: lg
+    refreshSeconds: 15
+    supportedFilters: [site, tag]
+  - id: services.failures
+    title: Service Failures
+    category: services
+    description: Most recent failed services across all nodes.
+    dataQuery: service_failures_recent
+    defaultSize: md
+    refreshSeconds: 20
+    supportedFilters: [serviceType, site]
+  - id: alerts.active
+    title: Active Alerts
+    category: alerts
+    description: Open alerts sorted by severity then age.
+    dataQuery: alerts_active
+    defaultSize: md
+    refreshSeconds: 10
+    supportedFilters: [severity, source]
+

@@ -1,0 +1,318 @@
+/* Compact kiosk — iPad mini landscape (~1024×768) and smaller tablets */
+
+body.kiosk-compact .kiosk-shell {
+  gap: 8px;
+  padding: 10px 12px 8px;
+}
+
+body.kiosk-compact .kiosk-header {
+  align-items: center;
+  gap: 10px;
+}
+
+body.kiosk-compact .kiosk-header-main .brand--ascii {
+  max-width: 100%;
+}
+
+body.kiosk-compact .kiosk-header-main .brand-ascii--wide {
+  font-size: clamp(4px, 0.9vw, 7px);
+}
+
+body.kiosk-compact .kiosk-header-main .brand-ascii--narrow {
+  font-size: clamp(6px, 1.8vw, 9px);
+}
+
+body.kiosk-compact .kiosk-title {
+  font-size: clamp(22px, 4.2vw, 30px);
+}
+
+body.kiosk-compact .kiosk-subtitle {
+  margin-top: 4px;
+  font-size: 10px;
+}
+
+body.kiosk-compact .kiosk-clock-time {
+  font-size: clamp(20px, 3.2vw, 26px);
+}
+
+body.kiosk-compact .kiosk-clock-date {
+  font-size: 10px;
+}
+
+body.kiosk-compact .kiosk-header-links {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+body.kiosk-compact .kiosk-variant {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 32px;
+  padding: 6px 10px;
+  border: 1px solid rgba(155, 176, 204, 0.2);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  touch-action: manipulation;
+}
+
+body.kiosk-compact .kiosk-variant:active {
+  transform: scale(0.97);
+  background: var(--interactive-hover-bg);
+}
+
+body.kiosk-compact .kiosk-exit {
+  min-height: 36px;
+  padding: 6px 10px;
+  font-size: 10px;
+}
+
+body.kiosk-compact .kiosk-grid {
+  grid-template-columns: minmax(0, 0.88fr) minmax(0, 1.12fr);
+  gap: 8px;
+}
+
+body.kiosk-compact .kiosk-left {
+  gap: 8px;
+}
+
+body.kiosk-compact .kiosk-weather-hero {
+  gap: 8px;
+  padding: 10px 12px;
+}
+
+body.kiosk-compact .kiosk-weather-hero .weather-current-main {
+  gap: 10px;
+}
+
+body.kiosk-compact .kiosk-weather-hero .weather-icon-wrap {
+  width: 46px;
+  height: 46px;
+}
+
+body.kiosk-compact .kiosk-weather-hero .weather-temp {
+  font-size: clamp(30px, 5.5vw, 40px);
+}
+
+body.kiosk-compact .kiosk-weather-hero .weather-temp-unit {
+  margin-top: 6px;
+  font-size: 16px;
+}
+
+body.kiosk-compact .kiosk-weather-hero .weather-condition {
+  font-size: 13px;
+}
+
+body.kiosk-compact .kiosk-weather-hero .eyebrow {
+  font-size: 10px;
+}
+
+body.kiosk-compact .kiosk-weather-current {
+  gap: 8px;
+}
+
+body.kiosk-compact .kiosk-weather-stats {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+body.kiosk-compact .kiosk-weather-stats .weather-stat {
+  padding: 6px 8px;
+}
+
+body.kiosk-compact .kiosk-weather-stats .weather-stat span {
+  font-size: 9px;
+}
+
+body.kiosk-compact .kiosk-weather-stats .weather-stat strong {
+  font-size: 14px;
+}
+
+body.kiosk-compact .weather-daily-header {
+  margin-bottom: 4px;
+}
+
+body.kiosk-compact .weather-daily-header h2 {
+  font-size: 13px;
+}
+
+body.kiosk-compact .weather-daily-header .cell-sub {
+  font-size: 10px;
+}
+
+body.kiosk-compact .kiosk-weather-daily {
+  gap: 4px;
+}
+
+body.kiosk-compact .kiosk-weather-daily .weather-day--compact {
+  gap: 2px;
+  padding: 4px 2px 5px;
+}
+
+body.kiosk-compact .kiosk-weather-daily .weather-day-name {
+  font-size: 9px;
+}
+
+body.kiosk-compact .kiosk-weather-daily .weather-day-today {
+  font-size: 7px;
+}
+
+body.kiosk-compact .kiosk-weather-daily .weather-day--compact .weather-day-icon {
+  width: 20px;
+  height: 20px;
+}
+
+body.kiosk-compact .kiosk-weather-daily .weather-day-high {
+  font-size: 11px;
+}
+
+body.kiosk-compact .kiosk-weather-daily .weather-day-low {
+  font-size: 10px;
+}
+
+body.kiosk-compact .kiosk-weather-daily .weather-day-meta {
+  font-size: 8px;
+}
+
+body.kiosk-compact .kiosk-automations {
+  padding: 10px 12px;
+}
+
+body.kiosk-compact .kiosk-panel-head {
+  margin-bottom: 6px;
+}
+
+body.kiosk-compact .kiosk-panel-head .eyebrow {
+  font-size: 9px;
+}
+
+body.kiosk-compact .kiosk-panel-head h2 {
+  font-size: 15px;
+}
+
+body.kiosk-compact .kiosk-panel-head .cell-sub {
+  display: none;
+}
+
+body.kiosk-compact .kiosk-automation-grid {
+  gap: 6px;
+}
+
+body.kiosk-compact .kiosk-automation-card {
+  gap: 8px;
+  min-height: 52px;
+  padding: 8px 10px;
+}
+
+body.kiosk-compact .kiosk-automation-icon {
+  font-size: 20px;
+}
+
+body.kiosk-compact .kiosk-automation-card h3 {
+  font-size: 12px;
+}
+
+body.kiosk-compact .kiosk-automation-card p {
+  font-size: 10px;
+}
+
+body.kiosk-compact .kiosk-security {
+  padding: 10px 12px;
+}
+
+body.kiosk-compact .kiosk-security-layout {
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+body.kiosk-compact .kiosk-door-panel,
+body.kiosk-compact .kiosk-camera-panel {
+  padding: 8px;
+  max-height: 38vh;
+}
+
+body.kiosk-compact .panel-heading h3 {
+  font-size: 13px;
+}
+
+body.kiosk-compact .panel-heading span {
+  font-size: 10px;
+}
+
+body.kiosk-compact.kiosk-mode .door-row {
+  gap: 8px;
+  min-height: 48px;
+  padding: 8px 10px;
+}
+
+body.kiosk-compact .door-row h4 {
+  font-size: 12px;
+}
+
+body.kiosk-compact .door-row p {
+  font-size: 10px;
+}
+
+body.kiosk-compact .door-state {
+  width: 7px;
+  height: 32px;
+}
+
+body.kiosk-compact .door-row strong {
+  font-size: 11px;
+}
+
+body.kiosk-compact .kiosk-camera-grid {
+  gap: 6px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+body.kiosk-compact.kiosk-mode .camera-tile .camera-image {
+  min-height: 72px;
+}
+
+body.kiosk-compact .camera-tile footer {
+  padding: 5px 7px;
+}
+
+body.kiosk-compact .camera-tile strong {
+  font-size: 10px;
+}
+
+body.kiosk-compact .camera-tile span {
+  font-size: 9px;
+}
+
+body.kiosk-compact .status-pill {
+  font-size: 10px;
+  padding: 4px 8px;
+}
+
+/* Keep side-by-side in landscape on iPad mini; stack only on very narrow */
+@media (max-width: 820px) {
+  body.kiosk-compact.kiosk-mode {
+    overflow: auto;
+  }
+
+  body.kiosk-compact .kiosk-shell {
+    height: auto;
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+
+  body.kiosk-compact .kiosk-grid {
+    grid-template-columns: 1fr;
+  }
+
+  body.kiosk-compact .kiosk-door-panel,
+  body.kiosk-compact .kiosk-camera-panel {
+    max-height: none;
+  }
+}

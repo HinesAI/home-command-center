@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HCC | Gate</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Share+Tech+Mono&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css?v=23" />
+  </head>
+  <body class="login-page gate-page">
+    <div class="login-atmosphere" aria-hidden="true">
+      <div class="login-grid"></div>
+      <div class="login-scanlines"></div>
+      <div class="login-glow"></div>
+    </div>
+
+    <main class="login-shell gate-shell">
+      <section class="gate-stage">
+        <header class="login-hero gate-hero">
+          <div class="gate-hero-top">
+            <p class="login-channel">WEB-FLIP.LOCAL</p>
+            <div class="gate-hero-actions">
+              <time class="wall-clock gate-clock" id="wallClock" datetime="">
+                <span id="wallClockTime">--:--</span>
+              </time>
+              <button type="button" id="signInBtn" class="gate-signin-btn">Sign in</button>
+            </div>
+          </div>
+          <pre class="login-ascii login-ascii--wide" id="gateAsciiWide" aria-label="Home Command Center"></pre>
+          <pre class="login-ascii login-ascii--narrow" id="gateAsciiNarrow" aria-hidden="true"></pre>
+        </header>
+
+        <div class="gate-stats" aria-label="Live estate status">
+          <article class="gate-card" id="gateWeatherCard">
+            <header>
+              <span class="eyebrow">Weather</span>
+              <span id="gateWeatherStatus" class="status-pill">-</span>
+            </header>
+            <div class="gate-weather-main">
+              <strong id="gateWeatherTemp">--°</strong>
+              <div>
+                <p id="gateWeatherCondition">-</p>
+                <p id="gateWeatherMeta" class="cell-sub">-</p>
+              </div>
+            </div>
+          </article>
+
+          <article class="gate-card" id="gateClimateCard">
+            <header>
+              <span class="eyebrow">Climate</span>
+              <span id="gateClimateStatus" class="status-pill">-</span>
+            </header>
+            <div class="gate-climate-main">
+              <div>
+                <span class="climate-label">Inside</span>
+                <strong id="gateClimateInside">--°</strong>
+              </div>
+              <div>
+                <span class="climate-label">Set</span>
+                <strong id="gateClimateTarget">--°</strong>
+              </div>
+              <div>
+                <span class="climate-label">Mode</span>
+                <strong id="gateClimateMode">-</strong>
+              </div>
+            </div>
+            <button type="button" class="gate-action" data-requires-auth data-next="./climate.html">
+              Controls
+            </button>
+          </article>
+
+          <article class="gate-card" id="gateSecurityCard">
+            <header>
+              <span class="eyebrow">Security</span>
+              <span id="gateSecurityStatus" class="status-pill">-</span>
+            </header>
+            <div class="gate-stat-row">
+              <div><span>Doors open</span><strong id="gateDoorsOpen">-</strong></div>
+              <div><span>Doors online</span><strong id="gateDoorsOnline">-</strong></div>
+              <div><span>Cameras</span><strong id="gateCameras">-</strong></div>
+            </div>
+            <button type="button" class="gate-action" data-requires-auth data-next="./security.html">
+              Open security
+            </button>
+          </article>
+
+          <article class="gate-card" id="gateFleetCard">
+            <header>
+              <span class="eyebrow">Fleet</span>
+              <span id="gateFleetStatus" class="status-pill">-</span>
+            </header>
+            <div class="gate-stat-row">
+              <div><span>Servers</span><strong id="gateServers">-</strong></div>
+              <div><span>Stale</span><strong id="gateStale">-</strong></div>
+              <div><span>Avg CPU</span><strong id="gateCpu">-</strong></div>
+            </div>
+            <div class="gate-stat-row gate-stat-row--secondary">
+              <div><span>VMs up</span><strong id="gateVms">-</strong></div>
+              <div><span>Containers</span><strong id="gateContainers">-</strong></div>
+              <div><span>Clients</span><strong id="gateClients">-</strong></div>
+            </div>
+            <button type="button" class="gate-action" data-requires-auth data-next="./index.html">
+              Open dashboard
+            </button>
+          </article>
+        </div>
+
+        <footer class="login-status-strip">
+          <span><i class="login-led ok"></i> Read-only gate</span>
+          <span class="login-status-host" id="gateHost">192.168.4.237</span>
+          <span id="gateRefreshMeta" class="cell-sub">-</span>
+        </footer>
+      </section>
+    </main>
+
+    <script src="./common.js?v=23"></script>
+    <script src="./login.js?v=5"></script>
+  </body>
+</html>

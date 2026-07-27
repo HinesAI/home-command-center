@@ -1,0 +1,3 @@
+# name|target|label — ping targets shown in the NETWORK panel
+gateway|192.168.1.1|Gateway
+internet|1.1.1.1|Internet

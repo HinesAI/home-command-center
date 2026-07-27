@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HCC | Docker Containers</title>
+    <link rel="stylesheet" href="./styles.css?v=23" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="./index.html"><span class="brand-mark">H</span><span><strong>Home Command Center</strong></span></a>
+        <nav id="appNav" class="app-nav"></nav>
+        <div class="session-tools">
+          <span id="authUserLabel" class="user-label"></span>
+          <a id="adminNavLink" href="./admin.html">Admin</a>
+          <button id="logoutBtn" type="button">Logout</button>
+        </div>
+      </header>
+      <main class="dashboard page-grid">
+        <section class="page-title">
+          <div><p class="eyebrow">Docker fleet</p><h1>Docker Containers</h1><p id="containersLabel">Container health reported by Linux VM agents.</p></div>
+          <span class="status-pill ok" id="containersPageStatus">-</span>
+        </section>
+        <section class="stat-grid">
+          <article class="stat-card"><span>Total</span><strong id="containerTotalCount">-</strong><small id="containersTimeLabel">Updated: -</small></article>
+          <article class="stat-card"><span>Running</span><strong id="containerRunningCount">-</strong><small>Healthy containers</small></article>
+          <article class="stat-card"><span>Stopped</span><strong id="containerStoppedCount" class="critical-text">-</strong><small>Action available</small></article>
+          <article class="stat-card"><span>Hosts</span><strong id="containerHostCount">-</strong><small id="containerStaleHostCount">- stale</small></article>
+        </section>
+        <section class="overview-section">
+          <div class="section-header">
+            <h2>Container inventory</h2>
+            <div id="actionStatus" class="action-status"></div>
+          </div>
+          <div class="filter-row-live">
+            <label class="filter-field"><span>Status</span><select id="filterStatus"><option value="all">All</option><option value="running">Running</option><option value="stopped">Stopped</option><option value="restarting">Restarting</option><option value="paused">Paused</option></select></label>
+            <label class="filter-field"><span>Host</span><select id="filterHost"><option value="all">All Docker hosts</option></select></label>
+          </div>
+          <div class="table-wrap">
+            <table id="containerTable" class="fleet-table">
+              <thead><tr><th>Name</th><th>Image</th><th>Status</th><th>CPU</th><th>Memory</th><th>Network I/O</th><th>Host</th><th>Host State</th><th>Actions</th></tr></thead>
+              <tbody id="containerTableBody"><tr><td colspan="9" class="empty-state">Loading docker containers...</td></tr></tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+      <footer class="page-footer"><span id="errorLabel"></span></footer>
+    </div>
+    <script src="./common.js?v=23"></script>
+    <script src="./containers.js?v=10"></script>
+  </body>
+</html>

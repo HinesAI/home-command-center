@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HCC | Overview</title>
+    <link rel="stylesheet" href="./styles.css?v=25" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="./index.html" aria-label="Home Command Center overview">
+          <span class="brand-mark" aria-hidden="true">H</span>
+          <span>
+            <strong>Home Command Center</strong>
+          </span>
+        </a>
+        <nav id="appNav" class="app-nav" aria-label="Primary navigation"></nav>
+        <div class="session-tools">
+          <span id="authUserLabel" class="user-label"></span>
+          <a id="adminNavLink" href="./admin.html">Admin</a>
+          <button id="logoutBtn" type="button">Logout</button>
+        </div>
+      </header>
+
+      <main class="dashboard">
+        <header class="welcome-bar" aria-label="Welcome">
+          <h1 class="welcome-title">Welcome Home</h1>
+          <time class="wall-clock welcome-clock" id="wallClock" datetime="">
+            <span id="wallClockTime" class="welcome-clock-time">--:--</span>
+            <span id="wallClockDate" class="welcome-clock-date">---</span>
+          </time>
+        </header>
+
+        <div class="home-hero-row">
+          <section class="weather-hero" id="weatherHero" aria-label="Weather forecast" data-condition="loading">
+            <div class="weather-hero-glow" aria-hidden="true"></div>
+            <div class="weather-current">
+              <div class="weather-current-main">
+                <div class="weather-icon-wrap" id="weatherIcon" aria-hidden="true"></div>
+                <div class="weather-current-copy">
+                  <p class="eyebrow" id="weatherLocation">Loading weather...</p>
+                  <div class="weather-temp-line">
+                    <span class="weather-temp" id="weatherTemp">--</span><span class="weather-temp-unit">°F</span>
+                  </div>
+                  <p class="weather-condition" id="weatherCondition">-</p>
+                </div>
+              </div>
+              <div class="weather-now-stats" id="weatherNowStats">
+                <div class="weather-stat"><span>Feels like</span><strong id="weatherFeels">-</strong></div>
+                <div class="weather-stat"><span>Wind</span><strong id="weatherWind">-</strong></div>
+                <div class="weather-stat"><span>Humidity</span><strong id="weatherHumidity">-</strong></div>
+                <div class="weather-stat"><span>UV index</span><strong id="weatherUv">-</strong></div>
+              </div>
+            </div>
+            <div class="weather-daily-wrap">
+              <div class="weather-daily-header">
+                <h2>7-day forecast</h2>
+                <span id="weatherUpdated" class="cell-sub">-</span>
+              </div>
+              <div class="weather-daily" id="weatherDaily">
+                <p class="empty-state">Loading forecast...</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="climate-hero" id="dashClimateHero" aria-labelledby="climateTitle">
+            <div class="climate-hero-head">
+              <div>
+                <p class="eyebrow">Home</p>
+                <h2 id="climateTitle">Climate</h2>
+                <p id="dashClimateMeta" class="cell-sub">Sensi thermostat</p>
+              </div>
+              <div class="climate-hero-actions">
+                <span id="dashClimateStatus" class="status-pill">-</span>
+                <a class="section-link" href="./climate.html">Full controls</a>
+              </div>
+            </div>
+            <div id="dashClimateCards" class="climate-grid climate-grid--overview">
+              <p class="empty-state">Loading thermostat...</p>
+            </div>
+          </section>
+        </div>
+
+        <section class="overview-section security-section" id="dashSecurityHero" aria-labelledby="securityTitle">
+          <div class="section-header">
+            <div>
+              <p class="eyebrow">Tier 1</p>
+              <h2 id="securityTitle">Security</h2>
+              <p id="dashSecurityMeta" class="cell-sub">Door sensors and live camera snapshots</p>
+            </div>
+            <div class="section-actions">
+              <span id="dashSecurityStatus" class="status-pill">-</span>
+              <a class="button-link" href="./security.html">Open Security</a>
+            </div>
+          </div>
+          <div class="security-layout">
+            <div class="door-panel" aria-label="Door sensors">
+              <div class="panel-heading">
+                <h3>Door sensors</h3>
+                <span id="dashDoorSummary">-</span>
+              </div>
+              <div id="overviewDoorList" class="door-list">
+                <p class="empty-state">Loading door sensors...</p>
+              </div>
+            </div>
+            <div class="camera-panel" aria-label="Camera previews">
+              <div class="panel-heading">
+                <h3>Frigate cameras</h3>
+                <span id="dashCameraSummary">-</span>
+              </div>
+              <div id="overviewCameraPreviews" class="camera-grid">
+                <p class="empty-state">Loading camera previews...</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="overview-section server-section" id="dashServersHero" aria-labelledby="serverTitle">
+          <div class="section-header">
+            <div>
+              <p class="eyebrow">Tier 1</p>
+              <h2 id="serverTitle">Server Health</h2>
+              <p id="dashServerMeta" class="cell-sub">Fleet resource use across enrolled servers</p>
+            </div>
+            <div class="section-actions">
+              <span id="dashServersStatus" class="status-pill">-</span>
+              <a class="button-link secondary" href="./devices-servers.html">Open Server Fleet</a>
+            </div>
+          </div>
+          <div class="fleet-summary" aria-label="Fleet resource meters">
+            <article class="meter-card">
+              <div class="metric-head"><span>Avg CPU</span><strong id="dashFleetCpu">-</strong></div>
+              <div class="meter"><span id="dashFleetCpuBar"></span></div>
+            </article>
+            <article class="meter-card">
+              <div class="metric-head"><span>Memory</span><strong id="dashFleetMem">-</strong></div>
+              <div class="meter"><span id="dashFleetMemBar"></span></div>
+            </article>
+            <article class="meter-card">
+              <div class="metric-head"><span>Storage</span><strong id="dashFleetStorage">-</strong></div>
+              <div class="meter" id="dashFleetStorageMeter"><span id="dashFleetStorageBar"></span></div>
+            </article>
+          </div>
+          <div class="table-wrap">
+            <table class="fleet-table">
+              <thead>
+                <tr>
+                  <th scope="col">Hostname</th>
+                  <th scope="col">Role</th>
+                  <th scope="col">CPU</th>
+                  <th scope="col">Memory</th>
+                  <th scope="col">Storage</th>
+                  <th scope="col">State</th>
+                </tr>
+              </thead>
+              <tbody id="dashServerTableBody">
+                <tr><td colspan="6" class="empty-state">Loading servers...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="quick-links" aria-label="Quick links">
+          <a class="quick-card" id="wan" href="#" onclick="return false;">
+            <span>Internet Speed</span>
+            <strong id="dashWanDown">-</strong>
+            <small><span id="dashWanUp">-</span> up · <span id="dashWanPing">-</span> · <span id="dashWanStatus">-</span></small>
+          </a>
+          <a class="quick-card" id="vms" href="./vms.html">
+            <span>Virtual Machines</span>
+            <strong id="dashVmRunning">-</strong>
+            <small><span id="dashVmStopped">-</span> stopped · <span id="dashVmsStatus">-</span></small>
+          </a>
+          <a class="quick-card" id="containers" href="./containers.html">
+            <span>Docker Containers</span>
+            <strong id="dashContainerRunning">-</strong>
+            <small><span id="dashContainerHosts">-</span> hosts · <span id="dashContainersStatus">-</span></small>
+          </a>
+          <a class="quick-card" href="./devices-clients.html">
+            <span>Clients</span>
+            <strong id="dashDeviceClients">-</strong>
+            <small><span id="dashClientStale">-</span> stale · <span id="dashClientsStatus">-</span></small>
+          </a>
+        </section>
+      </main>
+
+      <footer class="page-footer"><span id="errorLabel"></span></footer>
+    </div>
+
+    <script src="./common.js?v=24"></script>
+    <script src="./glance.js?v=2"></script>
+    <script src="./climate.js?v=3"></script>
+    <script src="./main.js?v=20"></script>
+  </body>
+</html>

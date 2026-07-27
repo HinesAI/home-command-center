@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HCC | Security</title>
+    <link rel="stylesheet" href="./styles.css?v=23" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="./index.html"><span class="brand-mark">H</span><span><strong>Home Command Center</strong></span></a>
+        <nav id="appNav" class="app-nav"></nav>
+        <div class="session-tools">
+          <span id="authUserLabel" class="user-label"></span>
+          <a id="adminNavLink" href="./admin.html">Admin</a>
+          <button id="logoutBtn" type="button">Logout</button>
+        </div>
+      </header>
+      <main class="dashboard page-grid">
+        <section class="page-title">
+          <div><p class="eyebrow">Integrations</p><h1>Security</h1><p id="securityLabel">Frigate cameras, Home Assistant door sensors, and external platform links.</p></div>
+          <div class="section-actions">
+            <span id="securityPageStatus" class="status-pill">-</span>
+            <span id="securityTimeLabel">Updated: -</span>
+          </div>
+        </section>
+        <nav id="securitySubNav" class="subnav"></nav>
+
+        <section class="stat-grid" id="securitySummaryPanel">
+          <article class="stat-card"><span>Services</span><strong id="securityServiceCount">-</strong><small>Integrated platforms</small></article>
+          <article class="stat-card"><span>Online</span><strong id="securityOnlineCount">-</strong><small>Reachable now</small></article>
+          <article class="stat-card"><span>Offline</span><strong id="securityOfflineCount" class="critical-text">-</strong><small>Needs attention</small></article>
+          <article class="stat-card"><span>Cameras / Doors</span><strong><span id="securityCameraCount">-</span> / <span id="securitySensorCount">-</span></strong><small>Frigate + HA</small></article>
+        </section>
+
+        <section class="overview-section" id="securityOverviewPanel">
+          <div class="section-header"><h2>Security overview</h2></div>
+          <div id="securityCards" class="control-grid"></div>
+          <div class="security-layout" style="margin-top:16px;">
+            <div class="door-panel">
+              <div class="panel-heading"><h3>Door sensors</h3><span id="overviewHaMeta">Home Assistant</span></div>
+              <div class="table-wrap"><table class="fleet-table"><thead><tr><th>Door</th><th>State</th><th>Link</th></tr></thead><tbody id="overviewDoorTable"><tr><td colspan="3" class="empty-state">Loading...</td></tr></tbody></table></div>
+            </div>
+            <div class="camera-panel">
+              <div class="panel-heading"><h3>Camera previews</h3><span id="overviewPreviewMeta">Frigate live streams</span></div>
+              <div id="overviewCameraPreviews" class="camera-grid"><p class="empty-state">Loading camera previews...</p></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="overview-section hidden-panel" id="frigatePanel">
+          <div class="section-header"><h2>Frigate cameras</h2><a id="frigateOpenLink" class="section-link" href="#" target="_blank" rel="noopener">Open Frigate</a></div>
+          <div class="table-wrap"><table class="fleet-table"><thead><tr><th>Camera</th><th>Status</th><th>Camera FPS</th><th>Detection FPS</th><th>Detection</th></tr></thead><tbody id="frigateCameraTable"><tr><td colspan="5" class="empty-state">Loading...</td></tr></tbody></table></div>
+        </section>
+
+        <section class="overview-section hidden-panel" id="frigateEmbedPanel">
+          <div class="section-header"><h2>Frigate live view</h2><a id="frigateEmbedLink" class="section-link" href="#" target="_blank" rel="noopener">Open full UI</a></div>
+          <iframe id="frigateFrame" class="security-embed" title="Frigate NVR" loading="lazy"></iframe>
+        </section>
+
+        <section class="overview-section hidden-panel" id="haPanel">
+          <div class="section-header"><h2>Door sensors</h2><a id="haOpenLink" class="section-link" href="#" target="_blank" rel="noopener">Open Home Assistant</a></div>
+          <p class="cell-sub">Door contact states from <strong id="haHostLabel">-</strong>.</p>
+          <div class="table-wrap"><table class="fleet-table"><thead><tr><th>Door</th><th>State</th><th>Sensor Link</th><th>Last Changed</th></tr></thead><tbody id="haSensorTable"><tr><td colspan="4" class="empty-state">Loading...</td></tr></tbody></table></div>
+          <div class="action-row-spaced"><a id="haPrimaryLink" class="button-link" href="#" target="_blank" rel="noopener">Launch Home Assistant</a></div>
+        </section>
+      </main>
+      <footer class="page-footer"><span id="errorLabel"></span></footer>
+    </div>
+    <script src="./common.js?v=23"></script>
+    <script src="./security.js?v=10"></script>
+  </body>
+</html>

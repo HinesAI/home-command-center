@@ -1,0 +1,59 @@
+<!--
+  HCCv2 standard authenticated page template.
+
+  Copy this skeleton when adding a new dashboard page:
+  1. Set <title> and page-specific content inside <main class="dashboard page-grid">.
+  2. Call initAppPage("nav-id") from your page JS (overview|devices|vms|containers|security).
+  3. Use design classes: page-title, stat-grid, overview-section, table-wrap, fleet-table, status-pill.
+  4. Put refresh errors in #errorLabel footer.
+  5. Bump ?v= on styles.css and common.js when assets change.
+-->
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HCC | Page Title</title>
+    <link rel="stylesheet" href="./styles.css?v=23" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="./index.html" aria-label="Home Command Center overview">
+          <span class="brand-mark" aria-hidden="true">H</span>
+          <span>
+            <strong>Home Command Center</strong>
+          </span>
+        </a>
+        <nav id="appNav" class="app-nav" aria-label="Primary navigation"></nav>
+        <div class="session-tools">
+          <span id="authUserLabel" class="user-label"></span>
+          <a id="adminNavLink" href="./admin.html">Admin</a>
+          <button id="logoutBtn" type="button">Logout</button>
+        </div>
+      </header>
+
+      <main class="dashboard page-grid">
+        <section class="page-title">
+          <div>
+            <p class="eyebrow">Section</p>
+            <h1>Page Title</h1>
+            <p>One-line description for operators.</p>
+          </div>
+          <div class="section-actions">
+            <span class="status-pill ok">Nominal</span>
+          </div>
+        </section>
+
+        <!-- Page content goes here -->
+      </main>
+
+      <footer class="page-footer">
+        <span id="errorLabel"></span>
+      </footer>
+    </div>
+
+    <script src="./common.js?v=23"></script>
+    <script src="./your-page.js?v=1"></script>
+  </body>
+</html>
