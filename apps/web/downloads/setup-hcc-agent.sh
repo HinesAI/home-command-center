@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-CORE_BASE_URL="${HCC_CORE_BASE_URL:-http://hcc.web-flip.local}"
-WEB_BASE_URL="${HCC_WEB_BASE_URL:-http://hcc.web-flip.local}"
+CORE_BASE_URL="${HCC_CORE_BASE_URL:-http://hcc.example.local}"
+WEB_BASE_URL="${HCC_WEB_BASE_URL:-http://hcc.example.local}"
 NODE_ID="${HCC_AGENT_NODE_ID:-$(hostname -s | tr '[:upper:]' '[:lower:]')}"
 AGENT_ID="${HCC_AGENT_ID:-agent-${NODE_ID}}"
 INTERVAL="${HCC_AGENT_INTERVAL_SECONDS:-120}"

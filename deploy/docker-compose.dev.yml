@@ -18,7 +18,7 @@ services:
       HCC_SERVICES: "docker,ssh,ufw"
       HCC_CONTAINERS: "nextcloud,jellyfin,mariadb,postgres,redis,nginx,traefik,caddy"
       HCC_AUTH_ENABLED: "true"
-      HCC_WEB_BASE_URL: "http://hcc.web-flip.local/downloads"
+      HCC_WEB_BASE_URL: "http://hcc.example.local/downloads"
       HCC_VERSION_PATH: "/app/VERSION"
       HCC_RELEASE_CHANNEL: "stable"
     ports:

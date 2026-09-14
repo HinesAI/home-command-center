@@ -1,4 +1,4 @@
-$Script:HccWinSwUrl = "http://192.168.4.237:3000/downloads/WinSW-x64.exe"
+$Script:HccWinSwUrl = "http://192.168.1.10:3000/downloads/WinSW-x64.exe"
 
 function Get-HccAgentWrapperPath {
     param([string]$InstallDir = (Join-Path $env:ProgramFiles "HCC-Agent"))
@@ -167,8 +167,8 @@ function New-HccAgentWinSwXml {
     $xml = @"
 <service>
   <id>HCC-Agent</id>
-  <name>HCCv2 Agent</name>
-  <description>HCCv2 heartbeat and inventory agent</description>
+  <name>HCC Agent</name>
+  <description>HCC heartbeat and inventory agent</description>
   <executable>$powershell</executable>
   <arguments>$arguments</arguments>
   <workingdirectory>$InstallDir</workingdirectory>

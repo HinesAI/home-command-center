@@ -1,6 +1,6 @@
 # apps/agent
 
-Small Linux heartbeat agent for HCCv2.
+Small Linux heartbeat agent for Home Command Center.
 
 ## Files
 

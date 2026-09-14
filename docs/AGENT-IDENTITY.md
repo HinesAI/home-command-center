@@ -9,17 +9,17 @@ HCC agents should run under a dedicated identity, not an interactive admin and n
 - Safe path to agent self-update and future software deployment
 - Same model across Windows (gMSA) and Linux (local service user)
 
-## Recommended AD layout (WEB-FLIP example)
+## Recommended AD layout (EXAMPLE example)
 
 ### Rollout order (one DC writes AD; replication syncs the domain)
 
-All AD object creation happens on **one DC** (recommended: `HINESDC1`). AD replication distributes groups and the gMSA to every DC automatically. Do not create the same objects on multiple DCs.
+All AD object creation happens on **one DC** (recommended: `HCC-DC1`). AD replication distributes groups and the gMSA to every DC automatically. Do not create the same objects on multiple DCs.
 
-**On HINESDC1 (elevated PowerShell):**
+**On HCC-DC1 (elevated PowerShell):**
 
 ```powershell
 Set-ExecutionPolicy Bypass -Scope Process -Force
-$base = "http://192.168.4.237:3000/downloads/ad"
+$base = "http://192.168.1.10:3000/downloads/ad"
 $dir = "C:\Windows\Temp\hcc-ad"
 New-Item -ItemType Directory -Force -Path $dir | Out-Null
 Invoke-WebRequest "$base/bootstrap-ad-from-dc.ps1" -OutFile "$dir\go.ps1" -UseBasicParsing
@@ -27,12 +27,12 @@ Invoke-WebRequest "$base/bootstrap-ad-from-dc.ps1" -OutFile "$dir\go.ps1" -UseBa
 
 | Step | Command | What happens |
 |------|---------|--------------|
-| 1 | `& "$dir\go.ps1" -Phase Groups` | Creates all tier groups on HINESDC1 |
-| 2 | `& "$dir\go.ps1" -Phase WaitGroups` | Polls HINESDC1/2/3 until groups exist everywhere |
+| 1 | `& "$dir\go.ps1" -Phase Groups` | Creates all tier groups on HCC-DC1 |
+| 2 | `& "$dir\go.ps1" -Phase WaitGroups` | Polls HCC-DC1/2/3 until groups exist everywhere |
 | 3 | Host ACLs (each DC) | `setup-host-hcc-permissions.ps1 -HostRole dc` |
-| 4 | `& "$dir\go.ps1" -Phase ServiceAccount` | Creates `svc-hcc-agent` gMSA on HINESDC1 |
+| 4 | `& "$dir\go.ps1" -Phase ServiceAccount` | Creates `svc-hcc-agent` gMSA on HCC-DC1 |
 | 5 | `& "$dir\go.ps1" -Phase WaitServiceAccount` | Polls until gMSA + group membership replicate |
-| 6 | Agent install (each DC) | Bootstrap with `-RunAsAccount "WEB-FLIP\svc-hcc-agent$"` |
+| 6 | Agent install (each DC) | Bootstrap with `-RunAsAccount "EXAMPLE\svc-hcc-agent$"` |
 
 Groups created in step 1:
 
@@ -44,9 +44,9 @@ Groups created in step 1:
 | `HCC-Agent-Deployers` | Human software install via UI |
 | `HCC-Agent-ServiceAccounts` | Agent execution principals (gMSA added in step 4) |
 
-Step 3 grants `WEB-FLIP\HCC-Agent-ServiceAccounts` local rights on each host (NTFS, batch logon, service start/stop). Run this after groups replicate but before or after gMSA creation.
+Step 3 grants `EXAMPLE\HCC-Agent-ServiceAccounts` local rights on each host (NTFS, batch logon, service start/stop). Run this after groups replicate but before or after gMSA creation.
 
-Scripts live in `deploy/ad/` (`config.web-flip.psd1` lists DC names for replication checks).
+Scripts live in `deploy/ad/` (`config.example.psd1` lists DC names for replication checks).
 
 ### 1. Group Managed Service Account (preferred)
 
@@ -54,10 +54,10 @@ Use one gMSA for all HCC agents, or one per tier (servers vs DCs).
 
 ```powershell
 # Prefer the bundled script (after tier groups + host ACLs):
-.\setup-ad-service-account.ps1 -AllowedComputerNames HINESDC1,HINESDC2,HINESDC3
+.\setup-ad-service-account.ps1 -AllowedComputerNames HCC-DC1,HCC-DC2,HCC-DC3
 
 # Manual equivalent:
-New-ADServiceAccount -Name "svc-hcc-agent" -DNSHostName "svc-hcc-agent.web-flip.local" -PrincipalsAllowedToRetrieveManagedPassword "HINESDC1$","HINESDC2$","HINESDC3$"
+New-ADServiceAccount -Name "svc-hcc-agent" -DNSHostName "svc-hcc-agent.example.local" -PrincipalsAllowedToRetrieveManagedPassword "HCC-DC1$","HCC-DC2$","HCC-DC3$"
 Add-ADGroupMember -Identity "HCC-Agent-ServiceAccounts" -Members (Get-ADServiceAccount svc-hcc-agent)
 ```
 
@@ -67,7 +67,7 @@ Install the gMSA on each host:
 Install-ADServiceAccount -Identity "svc-hcc-agent"
 ```
 
-Scheduled task principal: `WEB-FLIP\svc-hcc-agent$`
+Scheduled task principal: `EXAMPLE\svc-hcc-agent$`
 
 ### 2. Permission tiers (keep separate)
 
@@ -86,11 +86,11 @@ On each managed server:
 
 ```powershell
 # NTFS
-icacls "C:\Program Files\HCC-Agent" /grant "WEB-FLIP\svc-hcc-agent$:(OI)(CI)RX"
-icacls "C:\ProgramData\HCC-Agent" /grant "WEB-FLIP\svc-hcc-agent$:(OI)(CI)M"
+icacls "C:\Program Files\HCC-Agent" /grant "EXAMPLE\svc-hcc-agent$:(OI)(CI)RX"
+icacls "C:\ProgramData\HCC-Agent" /grant "EXAMPLE\svc-hcc-agent$:(OI)(CI)M"
 
 # Log on as batch job (required for scheduled task)
-ntrights +r SeBatchLogonRight -u "WEB-FLIP\svc-hcc-agent$"
+ntrights +r SeBatchLogonRight -u "EXAMPLE\svc-hcc-agent$"
 ```
 
 Grant service control only for named services (example for DC):
@@ -128,15 +128,15 @@ Installer flags:
 
 ```powershell
 ./install-windows-agent.ps1 `
-  -CoreBaseUrl http://192.168.4.237:18080 `
-  -NodeId hinesdc1 `
-  -AgentId agent-hinesdc1 `
-  -RunAsAccount "WEB-FLIP\svc-hcc-agent$"
+  -CoreBaseUrl http://192.168.1.10:18080 `
+  -NodeId hcc-dc1 `
+  -AgentId agent-hcc-dc1 `
+  -RunAsAccount "EXAMPLE\svc-hcc-agent$"
 ```
 
 ## Dashboard authentication (AD + local break-glass)
 
-Core auth is enabled by default in dev compose. Human users authenticate against WEB-FLIP AD; a local admin account provides emergency access if AD/LDAP fails.
+Core auth is enabled by default in dev compose. Human users authenticate against EXAMPLE AD; a local admin account provides emergency access if AD/LDAP fails.
 
 ### AD user setup
 
@@ -156,7 +156,7 @@ Users must belong to at least one `HCC-Agent-*` group or login is rejected.
 | `HCC-Agent-Maintainers` | Admin agent updates |
 | `HCC-Agent-Deployers` | Future software installs |
 
-Login formats: `WEB-FLIP\username`, `username`, or `username@web-flip.local`.
+Login formats: `EXAMPLE\username`, `username`, or `username@example.local`.
 
 ### Local break-glass admin
 
@@ -169,7 +169,7 @@ This account bypasses AD and has full dashboard permissions.
 
 ### Web login
 
-Open `http://192.168.4.237:3000/login.html` (protected pages redirect there automatically).
+Open `http://192.168.1.10:3000/login.html` (protected pages redirect there automatically).
 
 ## Core ↔ agent trust (phased)
 

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://hccv2.local/schemas/widget-definition.schema.json",
+  "$id": "https://hcc.example.local/schemas/widget-definition.schema.json",
   "title": "WidgetDefinition",
   "type": "object",
   "required": ["id", "title", "category", "dataQuery", "defaultSize"],

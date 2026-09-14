@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://hccv2.local/schemas/service-definition.schema.json",
+  "$id": "https://hcc.example.local/schemas/service-definition.schema.json",
   "title": "ServiceDefinition",
   "type": "object",
   "required": ["id", "displayName", "serviceType", "statusSource", "actions"],

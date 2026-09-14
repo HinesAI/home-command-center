@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info:
-  title: HCCv2 Core API
+  title: HCC Core API
   version: 0.1.0
   description: Control-plane API for fleet state, services, alerts, and dashboard widgets.
 servers:

@@ -25,7 +25,7 @@ Required:
   --node-id ID              Unique node id for this host
   --agent-id ID             Unique agent id for this host
   Either one of:
-    --core-base-url URL     Example: http://192.168.4.237:18080
+    --core-base-url URL     Example: http://192.168.1.10:18080
     --core-heartbeat-url URL
 
 Optional:

@@ -1,4 +1,0 @@
-# hostname,host_role,notes
-HINESDC1,dc,physical domain controller 192.168.4.100
-HINESDC2,dc,vm domain controller 192.168.4.191
-HINESDC3,dc,vm domain controller 192.168.4.147

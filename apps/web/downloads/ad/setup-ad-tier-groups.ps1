@@ -13,11 +13,11 @@
 
 .EXAMPLE
   .\setup-ad-tier-groups.ps1
-  .\setup-ad-tier-groups.ps1 -ConfigPath .\config.web-flip.psd1 -WhatIf
+  .\setup-ad-tier-groups.ps1 -ConfigPath .\config.example.psd1 -WhatIf
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
 param(
-    [string]$ConfigPath = (Join-Path $PSScriptRoot "config.web-flip.psd1")
+    [string]$ConfigPath = (Join-Path $PSScriptRoot "config.example.psd1")
 )
 
 $ErrorActionPreference = "Stop"

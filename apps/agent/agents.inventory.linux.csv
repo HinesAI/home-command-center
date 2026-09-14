@@ -1,3 +1,3 @@
 # host,user,node_id,agent_id,core_base_url,interval,services,storage_paths,containers
 # Ubuntu / Debian servers (not Proxmox hypervisors)
-192.168.4.11,jhadmin,bigbear2,agent-bigbear2,http://192.168.4.237:18080,120,"docker,ssh","/,/srv","nextcloud,jellyfin,mariadb,postgres,redis,nginx,traefik,caddy"
+192.168.1.50,deploy,appserver01,agent-appserver01,http://192.168.1.10:18080,120,"docker,ssh","/,/srv","nextcloud,jellyfin,mariadb,postgres,redis,nginx,traefik,caddy"

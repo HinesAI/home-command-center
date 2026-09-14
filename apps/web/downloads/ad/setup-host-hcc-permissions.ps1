@@ -4,7 +4,7 @@
 
 .DESCRIPTION
   Run AFTER setup-ad-tier-groups.ps1 and BEFORE creating the gMSA.
-  Grants WEB-FLIP\HCC-Agent-ServiceAccounts:
+  Grants EXAMPLE\HCC-Agent-ServiceAccounts:
     - NTFS on agent install/config paths
     - SeBatchLogonRight (scheduled task)
     - Start/stop/query on allowlisted services (role-specific)
@@ -19,7 +19,7 @@ param(
     [ValidateSet("dc", "member", "client")]
     [string]$HostRole,
 
-    [string]$ConfigPath = (Join-Path $PSScriptRoot "config.web-flip.psd1"),
+    [string]$ConfigPath = (Join-Path $PSScriptRoot "config.example.psd1"),
     [string]$ServiceAccountGroupSam = "HCC-Agent-ServiceAccounts"
 )
 

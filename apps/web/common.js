@@ -3,12 +3,12 @@ function resolveCoreBaseUrl() {
   const protocol = window.location.protocol;
   const host = window.location.hostname;
   // Canonical hostname: UI + API share origin via Caddy (/api → core)
-  if (host === "hcc.web-flip.local") {
+  if (host === "hcc.example.local") {
     return window.location.origin;
   }
-  const knownCoreHosts = new Set(["192.168.4.237", "web-flip.local"]);
-  if (knownCoreHosts.has(host) || host === "192.168.5.58") {
-    return `${protocol}//192.168.4.237:18080`;
+  const knownCoreHosts = new Set(["192.168.1.10", "example.local"]);
+  if (knownCoreHosts.has(host) || host === "192.168.1.10") {
+    return `${protocol}//192.168.1.10:18080`;
   }
   return `${protocol}//${host}:18080`;
 }

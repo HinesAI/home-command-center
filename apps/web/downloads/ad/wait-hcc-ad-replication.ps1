@@ -12,7 +12,7 @@ param(
     [ValidateSet("Groups", "ServiceAccount")]
     [string]$Stage,
 
-    [string]$ConfigPath = (Join-Path $PSScriptRoot "config.web-flip.psd1"),
+    [string]$ConfigPath = (Join-Path $PSScriptRoot "config.example.psd1"),
     [string]$ServiceAccountName = "svc-hcc-agent",
     [int]$TimeoutMinutes = 10,
     [int]$PollSeconds = 15

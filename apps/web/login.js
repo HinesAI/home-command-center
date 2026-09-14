@@ -138,7 +138,7 @@ async function loopGate() {
   startWallClock();
   bindAuthGates();
   const host = document.getElementById("gateHost");
-  if (host) host.textContent = window.location.hostname || "192.168.4.237";
+  if (host) host.textContent = window.location.hostname || "192.168.1.10";
 
   document.getElementById("signInBtn")?.addEventListener("click", () => {
     const next = new URLSearchParams(window.location.search).get("next") || "./index.html";

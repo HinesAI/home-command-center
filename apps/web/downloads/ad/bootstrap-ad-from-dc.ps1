@@ -3,9 +3,9 @@
   Download HCC AD scripts to a DC and run one rollout phase.
 
 .EXAMPLE
-  # On HINESDC1 (elevated):
+  # On HCC-DC1 (elevated):
   Set-ExecutionPolicy Bypass -Scope Process -Force
-  iex (iwr -UseBasicParsing http://192.168.4.237:3000/downloads/ad/bootstrap-ad-from-dc.ps1).Content
+  iex (iwr -UseBasicParsing http://192.168.1.10:3000/downloads/ad/bootstrap-ad-from-dc.ps1).Content
 
   .\bootstrap-ad-from-dc.ps1 -Phase Groups
   .\bootstrap-ad-from-dc.ps1 -Phase WaitGroups
@@ -18,14 +18,14 @@ param(
     [ValidateSet("Groups", "WaitGroups", "ServiceAccount", "WaitServiceAccount")]
     [string]$Phase,
 
-    [string]$BaseUrl = "http://192.168.4.237:3000/downloads/ad",
+    [string]$BaseUrl = "http://192.168.1.10:3000/downloads/ad",
     [string]$WorkDir = "C:\Windows\Temp\hcc-ad",
-    [string[]]$AllowedComputerNames = @("HINESDC1", "HINESDC2", "HINESDC3")
+    [string[]]$AllowedComputerNames = @("HCC-DC1", "HCC-DC2", "HCC-DC3")
 )
 
 $ErrorActionPreference = "Stop"
 $files = @(
-    "config.web-flip.psd1",
+    "config.example.psd1",
     "setup-ad-tier-groups.ps1",
     "setup-ad-service-account.ps1",
     "setup-ad-on-dc.ps1",
@@ -38,5 +38,5 @@ foreach ($file in $files) {
     Invoke-WebRequest -Uri "$BaseUrl/$file" -OutFile $dest -UseBasicParsing
 }
 
-$configPath = Join-Path $WorkDir "config.web-flip.psd1"
+$configPath = Join-Path $WorkDir "config.example.psd1"
 & (Join-Path $WorkDir "setup-ad-on-dc.ps1") -Phase $Phase -ConfigPath $configPath -AllowedComputerNames $AllowedComputerNames

@@ -1,8 +1,8 @@
 param(
     [Parameter(Mandatory = $true)][string]$NodeId,
     [Parameter(Mandatory = $true)][string]$AgentId,
-    [string]$CoreBaseUrl = "http://192.168.4.237:18080",
-    [string]$PackageUrl = "http://192.168.4.237:3000/downloads/hcc-agent-windows.zip",
+    [string]$CoreBaseUrl = "http://192.168.1.10:18080",
+    [string]$PackageUrl = "http://192.168.1.10:3000/downloads/hcc-agent-windows.zip",
     [string]$Services = "NTDS,DNS,DHCP,KDC,Netlogon,W32Time,WinRM,W3SVC,Spooler",
     [string]$StorageDrives = "C",
     [string]$Interval = "120",

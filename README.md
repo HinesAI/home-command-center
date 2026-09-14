@@ -6,18 +6,13 @@ Home Command Center is the unified product name for the dashboard, Core API, kio
 
 It does **not** replace Proxmox, Docker, Active Directory, Frigate, or Home Assistant — it sits above them and provides a unified operational view.
 
-## Repositories
+## Source
 
-This project is maintained in two GitHub repositories:
+Public platform repository: [home-command-center](https://github.com/HinesAI/home-command-center).
 
-| Repository | Visibility | Purpose |
-|------------|------------|---------|
-| [home-command-center](https://github.com/HinesAI/home-command-center) | Public | Shareable upstream, default **Home Command Center** branding |
-| [HCCv2](https://github.com/HinesAI/HCCv2) | Private | Internal production deployment and site-specific config |
+Keep live secrets, LAN inventories, and custom branding in a private deployment overlay or host config (`/etc/hcc`). See `docs/REPOSITORIES.md`.
 
-Shared platform code (Core, agents, dashboard, terminal, packaging) is synced between both repos with `scripts/sync-public-repo.sh`. See `docs/REPOSITORIES.md` for the workflow.
-
-Custom branding (for example **Hines Command Center**) is set with `HCC_PRODUCT_NAME` and does not require a fork.
+Custom product naming is set with `HCC_PRODUCT_NAME` (defaults to **Home Command Center**).
 
 ## Versioning and product names
 

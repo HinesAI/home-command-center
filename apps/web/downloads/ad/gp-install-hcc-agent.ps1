@@ -21,9 +21,9 @@
 #>
 [CmdletBinding()]
 param(
-    [string]$CoreBaseUrl = "http://192.168.4.237:18080",
-    [string]$WebBaseUrl = "http://192.168.4.237:3000",
-    [string]$RunAsAccount = "WEB-FLIP\svc-hcc-agent$",
+    [string]$CoreBaseUrl = "http://192.168.1.10:18080",
+    [string]$WebBaseUrl = "http://192.168.1.10:3000",
+    [string]$RunAsAccount = "EXAMPLE\svc-hcc-agent$",
     [string]$TaskName = "HCC-Agent",
     [string]$Interval = "120"
 )
@@ -72,9 +72,9 @@ try {
     Write-Log "gp-install start on $nodeId (permissionRole=$permissionRole)"
 
     $hostScriptPath = Join-Path $workDir "setup-host-hcc-permissions.ps1"
-    $configPath = Join-Path $workDir "config.web-flip.psd1"
+    $configPath = Join-Path $workDir "config.example.psd1"
     Invoke-Download "$downloads/setup-host-hcc-permissions.ps1" $hostScriptPath
-    Invoke-Download "$downloads/config.web-flip.psd1" $configPath
+    Invoke-Download "$downloads/config.example.psd1" $configPath
     & $hostScriptPath -HostRole $permissionRole -ConfigPath $configPath
     Write-Log "host permissions applied"
 

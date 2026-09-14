@@ -1,4 +1,4 @@
-# HCCv2 Architecture (V1)
+# HCC Architecture (V1)
 
 ## 1. Runtime Components
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# HCCv2 Linux update helper — runs outside hcc-agent.service (via systemd oneshot or detached).
+# HCC Linux update helper — runs outside hcc-agent.service (via systemd oneshot or detached).
 # Reads /var/lib/hcc-agent/update-manifest.json, stops the agent, installs staged files, restarts.
 set -euo pipefail
 

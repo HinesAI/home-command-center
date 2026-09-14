@@ -55,10 +55,10 @@ def write_banner(path: pathlib.Path, lines: list[str]) -> None:
 def main() -> int:
     root = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else pathlib.Path(__file__).resolve().parent.parent / "var")
 
-    # Wide: HINES flows directly into COMMAND (no extra gap between words).
-    wide = render("HINESCOMMAND CENTER", letter_gap=1)
+    # Wide: HOME flows directly into COMMAND (no extra gap between words).
+    wide = render("HOMECOMMAND CENTER", letter_gap=1)
 
-    stacked_top = render("HINES", letter_gap=1)
+    stacked_top = render("HOME", letter_gap=1)
     stacked_bottom = render("COMMAND CENTER", letter_gap=1)
     narrow: list[str] = []
     narrow.extend(center_block(stacked_top))

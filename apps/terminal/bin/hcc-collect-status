@@ -381,8 +381,8 @@ if [[ -n "${HCC_PVE_TOKEN:-}" ]]; then
 				mem_gb: ((.mem // 0) / 1073741824 | floor),
 				maxcpu: (.maxcpu // 0),
 				os: (
-					if (.name | test("Hinesdc"; "i")) then "win"
-					elif (.name | test("Ubuntu|Debian|HAOS|Docker|Frigate|Git|Mainnet|Testnet|Debug|coderepo|HinesAI"; "i")) then "linux"
+					if (.name | test("Hcc-Dc"; "i")) then "win"
+					elif (.name | test("Ubuntu|Debian|HAOS|Docker|Frigate|Git|Mainnet|Testnet|Debug|coderepo|ExampleOrg"; "i")) then "linux"
 					else "vm" end
 				)
 			}]

@@ -7,7 +7,7 @@ VERSION_FILE="$SCRIPT_DIR/VERSION"
 VERSION="$(tr -d '[:space:]' <"$VERSION_FILE")"
 INSTALL_ROOT="/opt/hcc"
 CONFIG_DIR="/etc/hcc"
-HOSTNAME_VALUE="hcc.web-flip.local"
+HOSTNAME_VALUE="hcc.example.local"
 BIND_ADDRESS="0.0.0.0"
 HTTP_PORT="80"
 START_STACK=1
@@ -18,7 +18,7 @@ usage() {
 Usage: sudo ./install-hcc.sh [options]
 
 Options:
-  --hostname NAME        Internal DNS name (default: hcc.web-flip.local)
+  --hostname NAME        Internal DNS name (default: hcc.example.local)
   --bind ADDRESS         LAN address to bind, or 0.0.0.0 (default)
   --port PORT            HTTP port (default: 80)
   --install-root PATH    Release root (default: /opt/hcc)

@@ -10,7 +10,7 @@ param(
     [string]$ServiceName = "HCC-Agent",
     [string]$InstallDir = (Join-Path $env:ProgramFiles "HCC-Agent"),
     [string]$AgentScript = "",
-    [string]$DownloadsBaseUrl = "http://192.168.4.237:3000/downloads",
+    [string]$DownloadsBaseUrl = "http://192.168.1.10:3000/downloads",
     [switch]$SkipScriptSync
 )
 

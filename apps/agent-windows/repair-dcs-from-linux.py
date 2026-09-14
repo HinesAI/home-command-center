@@ -10,25 +10,25 @@ except ImportError:
     sys.exit(1)
 
 HOSTS = [
-    ("192.168.4.100", "hinesdc1"),
-    ("192.168.4.191", "hinesdc2"),
-    ("192.168.4.147", "hinesdc3"),
+    ("192.168.1.11", "hcc-dc1"),
+    ("192.168.1.12", "hcc-dc2"),
+    ("192.168.1.13", "hcc-dc3"),
 ]
 FIX_URL = os.environ.get(
     "HCC_FIX_TASK_URL",
-    "http://192.168.4.237:3000/downloads/ad/fix-hcc-agent-task.ps1",
+    "http://192.168.1.10:3000/downloads/ad/fix-hcc-agent-task.ps1",
 )
 HEARTBEAT_URL = os.environ.get(
     "HCC_HEARTBEAT_URL",
-    "http://192.168.4.237:3000/downloads/heartbeat_sender.ps1",
+    "http://192.168.1.10:3000/downloads/heartbeat_sender.ps1",
 )
 REGISTER_URL = os.environ.get(
     "HCC_REGISTER_TASK_URL",
-    "http://192.168.4.237:3000/downloads/ad/register-hcc-agent-task.ps1",
+    "http://192.168.1.10:3000/downloads/ad/register-hcc-agent-task.ps1",
 )
 WATCHDOG_URL = os.environ.get(
     "HCC_WATCHDOG_URL",
-    "http://192.168.4.237:3000/downloads/ad/watchdog-hcc-agent.ps1",
+    "http://192.168.1.10:3000/downloads/ad/watchdog-hcc-agent.ps1",
 )
 
 
@@ -70,7 +70,7 @@ def main():
     if not username or not password:
         print(
             "Set domain credentials first:\n"
-            "  export HCC_DC_USER='WEB-FLIP\\\\Administrator'\n"
+            "  export HCC_DC_USER='EXAMPLE\\\\Administrator'\n"
             "  export HCC_DC_PASSWORD='your-password'\n"
             "  python3 repair-dcs-from-linux.py",
             file=sys.stderr,

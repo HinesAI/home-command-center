@@ -7,7 +7,7 @@ import urllib.error
 import urllib.request
 
 
-HA_URL = os.environ.get("HCC_HA_URL", "http://192.168.4.99:8123").rstrip("/")
+HA_URL = os.environ.get("HCC_HA_URL", "http://192.168.1.20:8123").rstrip("/")
 HA_TOKEN = os.environ.get("HCC_HA_TOKEN", "").strip()
 HA_DOOR_DEVICE_CLASSES = {
     value.strip().lower()
@@ -26,7 +26,7 @@ HA_CLIMATE_ENTITIES = [
     if value.strip()
 ]
 CLIMATE_REFRESH_SECONDS = int(os.environ.get("HCC_CLIMATE_REFRESH_SECONDS", "30"))
-FRIGATE_URL = os.environ.get("HCC_FRIGATE_URL", "http://192.168.8.80:5000").rstrip("/")
+FRIGATE_URL = os.environ.get("HCC_FRIGATE_URL", "http://192.168.1.30:5000").rstrip("/")
 INTEGRATION_TIMEOUT = float(os.environ.get("HCC_INTEGRATION_TIMEOUT", "5"))
 FRIGATE_CAMERA_PATH_PREFIX = "/api/v1/integrations/frigate/camera/"
 
@@ -37,7 +37,7 @@ WEATHER_TIMEZONE = os.environ.get("HCC_WEATHER_TIMEZONE", "America/Chicago").str
 WEATHER_CACHE_SECONDS = int(os.environ.get("HCC_WEATHER_CACHE_SECONDS", "900"))
 OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast"
 
-UNIFI_URL = os.environ.get("HCC_UNIFI_URL", "https://192.168.4.1").rstrip("/")
+UNIFI_URL = os.environ.get("HCC_UNIFI_URL", "https://192.168.1.1").rstrip("/")
 UNIFI_API_KEY = os.environ.get("HCC_UNIFI_API_KEY", "").strip()
 UNIFI_SITE = os.environ.get("HCC_UNIFI_SITE", "default").strip() or "default"
 UNIFI_VERIFY_SSL = os.environ.get("HCC_UNIFI_VERIFY_SSL", "false").lower() in ("1", "true", "yes")

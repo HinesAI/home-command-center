@@ -3,7 +3,7 @@
   Run HCC AD identity phases from a single domain controller. Objects replicate to the whole domain.
 
 .DESCRIPTION
-  Recommended sequence on HINESDC1 (or any one DC):
+  Recommended sequence on HCC-DC1 (or any one DC):
 
     Phase 1 - Groups only:
       .\setup-ad-on-dc.ps1 -Phase Groups
@@ -28,8 +28,8 @@ param(
     [ValidateSet("Groups", "WaitGroups", "ServiceAccount", "WaitServiceAccount", "All")]
     [string]$Phase,
 
-    [string]$ConfigPath = (Join-Path $PSScriptRoot "config.web-flip.psd1"),
-    [string[]]$AllowedComputerNames = @("HINESDC1", "HINESDC2", "HINESDC3"),
+    [string]$ConfigPath = (Join-Path $PSScriptRoot "config.example.psd1"),
+    [string[]]$AllowedComputerNames = @("HCC-DC1", "HCC-DC2", "HCC-DC3"),
     [switch]$SkipReplicationWait
 )
 

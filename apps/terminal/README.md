@@ -5,7 +5,7 @@ renders a full-screen ANSI dashboard on a Linux virtual terminal, normally
 `tty1`, for an always-on local operational view.
 
 This first version preserves the proven standalone collector while establishing
-HCC Terminal as an HCCv2 application. The intended end state is for HCC Core to
+HCC Terminal as a Home Command Center application. The intended end state is for HCC Core to
 own integration collection and normalization, with Terminal and Web consuming
 the same state.
 

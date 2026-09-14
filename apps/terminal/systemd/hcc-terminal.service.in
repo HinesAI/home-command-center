@@ -1,6 +1,6 @@
 [Unit]
 Description=HCC Terminal console dashboard
-Documentation=https://github.com/HinesAI/HCCv2/tree/main/apps/terminal
+Documentation=https://github.com/HinesAI/home-command-center/tree/main/apps/terminal
 After=local-fs.target multi-user.target network-online.target
 Wants=network-online.target
 Conflicts=getty@tty1.service

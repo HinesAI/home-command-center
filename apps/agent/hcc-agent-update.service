@@ -1,6 +1,6 @@
 [Unit]
-Description=HCCv2 agent update helper (oneshot)
-Documentation=https://github.com/HinesAI/HCCv2
+Description=HCC agent update helper (oneshot)
+Documentation=https://github.com/HinesAI/home-command-center
 DefaultDependencies=no
 After=network.target
 

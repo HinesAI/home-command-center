@@ -1,4 +1,4 @@
-# HCCv2 Dashboard — Frontend Design Brief
+# HCC Dashboard — Frontend Design Brief
 
 Hand this document to a designer (or Codex design pass). The output should be implementable by a coding agent into the existing static web app under `apps/web/`.
 
@@ -6,12 +6,12 @@ Hand this document to a designer (or Codex design pass). The output should be im
 
 ## 1. Product context
 
-**Home Command Center v2 (HCCv2)** is a homelab / small-enterprise infrastructure dashboard. It aggregates telemetry from agents on Windows servers, Linux servers, Proxmox hypervisors, and Linux VMs, and exposes read-only monitoring plus allowlisted control actions (services, VMs, Docker containers).
+**Home Command Center** is a homelab / small-enterprise infrastructure dashboard. It aggregates telemetry from agents on Windows servers, Linux servers, Proxmox hypervisors, and Linux VMs, and exposes read-only monitoring plus allowlisted control actions (services, VMs, Docker containers).
 
 **Primary user goal:** At a glance, know if the estate is healthy — especially **security (doors + cameras)** and **server health** — then drill into detail pages.
 
-**Domain:** `WEB-FLIP.LOCAL`  
-**Typical deployment:** Web UI `:3000`, Core API `:18080` (e.g. `http://192.168.4.237:3000`)
+**Domain:** `EXAMPLE.LOCAL`  
+**Typical deployment:** Web UI `:3000`, Core API `:18080` (e.g. `http://192.168.1.10:3000`)
 
 ---
 
@@ -162,8 +162,8 @@ All authenticated GETs unless noted. Responses include `generatedAt` and usually
 
 ```json
 {
-  "nodeId": "bigbear2",
-  "hostname": "bigbear2.web-flip.local",
+  "nodeId": "appserver01",
+  "hostname": "appserver01.example.local",
   "hostRole": "ubuntu-server",
   "deviceCategory": "server",
   "stale": false,
@@ -176,7 +176,7 @@ All authenticated GETs unless noted. Responses include `generatedAt` and usually
     "memoryTotalBytes": 0
   },
   "uptimeSec": 86400,
-  "ips": ["192.168.4.11"]
+  "ips": ["192.168.1.11"]
 }
 ```
 
@@ -185,7 +185,7 @@ All authenticated GETs unless noted. Responses include `generatedAt` and usually
 ```json
 {
   "nodeId": "proxmox-01",
-  "hostname": "Bigbear1",
+  "hostname": "Hypervisor01",
   "id": "100",
   "name": "Frigate",
   "type": "qemu",
@@ -202,8 +202,8 @@ All authenticated GETs unless noted. Responses include `generatedAt` and usually
 
 ```json
 {
-  "nodeId": "dockernode01",
-  "hostname": "dockernode01",
+  "nodeId": "docker01",
+  "hostname": "docker01",
   "name": "nextcloud-app-1",
   "image": "nextcloud:latest",
   "status": "running",
@@ -240,17 +240,17 @@ All authenticated GETs unless noted. Responses include `generatedAt` and usually
       "id": "frigate",
       "name": "Frigate NVR",
       "online": true,
-      "host": "192.168.8.80:5000",
-      "dashboardUrl": "http://192.168.8.80:5000",
+      "host": "192.168.1.30:5000",
+      "dashboardUrl": "http://192.168.1.30:5000",
       "details": {
         "cameraCount": 4,
         "onlineCameraCount": 4,
         "cameras": [
           {
-            "name": "FrontLeftCam",
+            "name": "driveway",
             "online": true,
-            "previewUrl": "/api/v1/integrations/frigate/camera/FrontLeftCam/latest.jpg",
-            "livePageUrl": "http://192.168.8.80:5000/live/FrontLeftCam"
+            "previewUrl": "/api/v1/integrations/frigate/camera/driveway/latest.jpg",
+            "livePageUrl": "http://192.168.1.30:5000/live/driveway"
           }
         ]
       }
@@ -261,7 +261,7 @@ All authenticated GETs unless noted. Responses include `generatedAt` and usually
         "sensorsConfigured": true,
         "sensors": [
           {
-            "name": "Kitchen Back Door",
+            "name": "back-door",
             "state": "Closed",
             "status": "online",
             "stateClass": "status-running"
@@ -279,7 +279,7 @@ All authenticated GETs unless noted. Responses include `generatedAt` and usually
 
 ```json
 {
-  "nodeId": "dockernode01",
+  "nodeId": "docker01",
   "actionId": "container.restart",
   "target": "nextcloud-app-1",
   "params": {}
@@ -397,17 +397,17 @@ When passing design back to Cursor for implementation:
 
 ---
 
-## 14. Live environment snapshot (reference)
+## 14. Example environment snapshot (reference)
 
-As of last rollout:
+Illustrative lab layout for designers — not a real site inventory:
 
 | Asset | Count / notes |
 |-------|----------------|
-| Proxmox hypervisors | Bigbear1, bigbear3, bigbear4 |
-| Docker VM agents | bigbear2, coderepo-1, dockernode01 |
-| Frigate cameras | FrontLeftCam, FrontRightCam, RearCam1, RearCam2 |
-| HA door sensors | Back Garage, Kitchen Back, Living Room Front |
-| Windows DCs | HINESDC1–3 (agents, no Docker) |
+| Proxmox hypervisors | hypervisor01–03 |
+| Docker host agents | appserver01, docker01 |
+| Frigate cameras | driveway, porch, backyard |
+| HA door sensors | front-door, garage, back-door |
+| Windows DCs | HCC-DC1–3 (agents, no Docker) |
 
 ---
 

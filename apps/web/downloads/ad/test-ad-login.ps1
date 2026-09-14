@@ -11,10 +11,10 @@ param(
     [string]$Username = $env:USERNAME,
     [Parameter(Mandatory = $true)]
     [Security.SecureString]$Password,
-    [string]$CoreUrl = "http://192.168.4.237:18080",
-    [string]$DomainDnsName = "web-flip.local",
-    [string]$DomainNetBios = "WEB-FLIP",
-    [string]$LdapServer = "192.168.4.100"
+    [string]$CoreUrl = "http://192.168.1.10:18080",
+    [string]$DomainDnsName = "example.local",
+    [string]$DomainNetBios = "EXAMPLE",
+    [string]$LdapServer = "192.168.1.11"
 )
 
 $ErrorActionPreference = "Stop"

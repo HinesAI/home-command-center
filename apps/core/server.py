@@ -127,7 +127,7 @@ RELEASES_PATH = os.environ.get(
     "HCC_AGENT_RELEASES_PATH",
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "agent_releases.json"),
 )
-WEB_BASE_URL = os.environ.get("HCC_WEB_BASE_URL", "http://192.168.4.237:3000/downloads")
+WEB_BASE_URL = os.environ.get("HCC_WEB_BASE_URL", "http://192.168.1.10:3000/downloads")
 VERSION_PATH = os.environ.get(
     "HCC_VERSION_PATH",
     os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "VERSION")),

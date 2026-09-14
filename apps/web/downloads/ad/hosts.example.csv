@@ -1,0 +1,4 @@
+# hostname,host_role,notes
+HCC-DC1,dc,physical domain controller 192.168.1.11
+HCC-DC2,dc,vm domain controller 192.168.1.12
+HCC-DC3,dc,vm domain controller 192.168.1.13

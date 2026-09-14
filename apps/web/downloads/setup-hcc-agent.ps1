@@ -3,7 +3,7 @@
   Install the HCC Windows agent.
 
 .EXAMPLE
-  Invoke-WebRequest http://192.168.4.237:3000/downloads/setup-hcc-agent.ps1 -OutFile $env:TEMP\setup-hcc-agent.ps1 -UseBasicParsing
+  Invoke-WebRequest http://192.168.1.10:3000/downloads/setup-hcc-agent.ps1 -OutFile $env:TEMP\setup-hcc-agent.ps1 -UseBasicParsing
   powershell.exe -NoProfile -ExecutionPolicy Bypass -File $env:TEMP\setup-hcc-agent.ps1
 
 .EXAMPLE
@@ -16,13 +16,13 @@
 
 .EXAMPLE
   # Member server with gMSA (host must already be allowed on the gMSA object):
-  powershell.exe -NoProfile -ExecutionPolicy Bypass -File $env:TEMP\setup-hcc-agent.ps1 -RunAsAccount "WEB-FLIP\svc-hcc-agent$"
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File $env:TEMP\setup-hcc-agent.ps1 -RunAsAccount "EXAMPLE\svc-hcc-agent$"
 #>
 param(
     [string]$NodeId = "",
     [string]$AgentId = "",
-    [string]$CoreBaseUrl = "http://192.168.4.237:18080",
-    [string]$WebBaseUrl = "http://192.168.4.237:3000",
+    [string]$CoreBaseUrl = "http://192.168.1.10:18080",
+    [string]$WebBaseUrl = "http://192.168.1.10:3000",
     [string]$RunAsAccount = "AUTO",
     [string]$Interval = "120",
     [string]$Services = "",
@@ -43,7 +43,7 @@ if (-not $AgentId) { $AgentId = "agent-$NodeId" }
 $domainRole = (Get-CimInstance Win32_ComputerSystem).DomainRole
 if ($RunAsAccount -eq "AUTO") {
     if ($domainRole -in 4, 5) {
-        $RunAsAccount = "WEB-FLIP\svc-hcc-agent$"
+        $RunAsAccount = "EXAMPLE\svc-hcc-agent$"
     } else {
         $RunAsAccount = ""
     }

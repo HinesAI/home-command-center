@@ -1,12 +1,12 @@
 @{
-    DomainDnsName = "web-flip.local"
-    DomainNetBios  = "WEB-FLIP"
-    GroupsOu       = "OU=Groups,OU=HCC,DC=web-flip,DC=local"
-    ServiceAccountsOu = "OU=Service Accounts,OU=HCC,DC=web-flip,DC=local"
+    DomainDnsName = "example.local"
+    DomainNetBios  = "EXAMPLE"
+    GroupsOu       = "OU=Groups,OU=HCC,DC=example,DC=local"
+    ServiceAccountsOu = "OU=Service Accounts,OU=HCC,DC=example,DC=local"
 
     # Write all AD objects on one DC; replication distributes them domain-wide.
-    WriteDomainController = "HINESDC1"
-    DomainControllers = @("HINESDC1", "HINESDC2", "HINESDC3")
+    WriteDomainController = "HCC-DC1"
+    DomainControllers = @("HCC-DC1", "HCC-DC2", "HCC-DC3")
 
     TierGroups = @(
         @{

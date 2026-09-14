@@ -1,5 +1,5 @@
 param(
-    [string]$CoreBaseUrl = "http://192.168.4.237:18080"
+    [string]$CoreBaseUrl = "http://192.168.1.10:18080"
 )
 
 $ErrorActionPreference = "Continue"
@@ -20,7 +20,7 @@ catch {
 
 Write-Host "`n[2] Package download"
 try {
-    $test = Invoke-WebRequest -Uri "http://192.168.4.237:3000/downloads/bootstrap-server-core.ps1" -UseBasicParsing -TimeoutSec 8
+    $test = Invoke-WebRequest -Uri "http://192.168.1.10:3000/downloads/bootstrap-server-core.ps1" -UseBasicParsing -TimeoutSec 8
     Write-Host "OK: bootstrap script reachable ($($test.RawContentLength) bytes)"
 }
 catch {

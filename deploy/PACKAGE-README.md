@@ -18,7 +18,7 @@ Docker installation requires Ubuntu package-repository access when Docker Engine
    tar -xzf hcc-v2.1.0-linux-amd64.tar.gz
    cd hcc-v2.1.0-linux-amd64
    sudo ./install-hcc.sh \
-     --hostname hcc.web-flip.local \
+     --hostname hcc.example.local \
      --bind 0.0.0.0 \
      --port 80
    ```

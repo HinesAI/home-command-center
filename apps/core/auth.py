@@ -23,13 +23,13 @@ logger = logging.getLogger("hcc.auth")
 AUTH_ENABLED = os.environ.get("HCC_AUTH_ENABLED", "true").lower() not in {"0", "false", "no"}
 AUTH_SECRET = os.environ.get("HCC_AUTH_SECRET", "change-me-in-production")
 SESSION_TTL_SECONDS = int(os.environ.get("HCC_SESSION_TTL_SECONDS", str(12 * 3600)))
-WEB_ORIGIN = os.environ.get("HCC_WEB_ORIGIN", "http://192.168.4.237:3000")
+WEB_ORIGIN = os.environ.get("HCC_WEB_ORIGIN", "http://192.168.1.10:3000")
 WEB_ORIGINS = [item.strip().rstrip("/") for item in WEB_ORIGIN.split(",") if item.strip()]
 
-LDAP_SERVER = os.environ.get("HCC_LDAP_SERVER", "ldap://192.168.4.100")
-LDAP_BASE_DN = os.environ.get("HCC_LDAP_BASE_DN", "DC=web-flip,DC=local")
-LDAP_DOMAIN = os.environ.get("HCC_LDAP_DOMAIN", "web-flip.local")
-LDAP_NETBIOS = os.environ.get("HCC_LDAP_NETBIOS", "WEB-FLIP")
+LDAP_SERVER = os.environ.get("HCC_LDAP_SERVER", "ldap://192.168.1.11")
+LDAP_BASE_DN = os.environ.get("HCC_LDAP_BASE_DN", "DC=example,DC=local")
+LDAP_DOMAIN = os.environ.get("HCC_LDAP_DOMAIN", "example.local")
+LDAP_NETBIOS = os.environ.get("HCC_LDAP_NETBIOS", "EXAMPLE")
 LDAP_USE_TLS = os.environ.get("HCC_LDAP_USE_TLS", "false").lower() in {"1", "true", "yes"}
 LDAP_BIND_USER = os.environ.get("HCC_LDAP_BIND_USER", "")
 LDAP_BIND_PASSWORD = os.environ.get("HCC_LDAP_BIND_PASSWORD", "")

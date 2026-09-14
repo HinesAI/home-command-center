@@ -5,13 +5,13 @@
   Host ACLs can be applied before or after gMSA creation; agent install comes last.
 
 .EXAMPLE
-  .\setup-ad-service-account.ps1 -AllowedComputerNames HINESDC1,HINESDC2,HINESDC3
+  .\setup-ad-service-account.ps1 -AllowedComputerNames HCC-DC1,HCC-DC2,HCC-DC3
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
 param(
-    [string]$ConfigPath = (Join-Path $PSScriptRoot "config.web-flip.psd1"),
+    [string]$ConfigPath = (Join-Path $PSScriptRoot "config.example.psd1"),
     [string]$ServiceAccountName = "svc-hcc-agent",
-    [string[]]$AllowedComputerNames = @("HINESDC1", "HINESDC2", "HINESDC3"),
+    [string[]]$AllowedComputerNames = @("HCC-DC1", "HCC-DC2", "HCC-DC3"),
     [string]$ServiceAccountGroupSam = "HCC-Agent-ServiceAccounts"
 )
 

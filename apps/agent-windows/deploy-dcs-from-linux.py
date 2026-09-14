@@ -14,11 +14,11 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 INVENTORY = os.path.join(SCRIPT_DIR, "agents.inventory.dc.csv")
 BOOTSTRAP_URL = os.environ.get(
     "HCC_BOOTSTRAP_URL",
-    "http://192.168.4.237:3000/downloads/bootstrap-server-core.ps1",
+    "http://192.168.1.10:3000/downloads/bootstrap-server-core.ps1",
 )
 RUN_AS_ACCOUNT = os.environ.get(
     "HCC_RUN_AS_ACCOUNT",
-    r"WEB-FLIP\svc-hcc-agent$",
+    r"EXAMPLE\svc-hcc-agent$",
 )
 
 
@@ -95,7 +95,7 @@ def main():
     if not username or not password:
         print(
             "Set domain credentials first:\n"
-            "  export HCC_DC_USER='WEB-FLIP\\\\Administrator'\n"
+            "  export HCC_DC_USER='EXAMPLE\\\\Administrator'\n"
             "  export HCC_DC_PASSWORD='your-password'\n"
             "  python3 deploy-dcs-from-linux.py",
             file=sys.stderr,

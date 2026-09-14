@@ -3,9 +3,9 @@
   Same as setup-hcc-agent.ps1 (kept for old bookmarks).
 #>
 param(
-    [string]$CoreBaseUrl = "http://192.168.4.237:18080",
-    [string]$WebBaseUrl = "http://192.168.4.237:3000",
-    [string]$RunAsAccount = "WEB-FLIP\svc-hcc-agent$"
+    [string]$CoreBaseUrl = "http://192.168.1.10:18080",
+    [string]$WebBaseUrl = "http://192.168.1.10:3000",
+    [string]$RunAsAccount = "EXAMPLE\svc-hcc-agent$"
 )
 
 $setupUrl = "$WebBaseUrl/downloads/setup-hcc-agent.ps1"

@@ -1,6 +1,6 @@
 # Contracts
 
-Contract-first foundation for HCCv2.
+Contract-first foundation for Home Command Center.
 
 - `openapi/core-api.yaml`: Core REST API surface
 - `schemas/agent-envelope.schema.json`: Envelope required for all agent messages
