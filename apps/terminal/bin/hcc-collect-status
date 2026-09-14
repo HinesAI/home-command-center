@@ -604,14 +604,7 @@ collect_frigate() {
 			cameras: [
 				.cameras | to_entries[] | {
 					name: .key,
-					short: (
-						if .key == "FrontLeftCam" then "FrontLeft"
-						elif .key == "FrontRightCam" then "FrontRight"
-						elif .key == "RearCam1" then "Rear1"
-						elif .key == "RearCam2" then "Rear2"
-						else (.key | gsub("Cam$"; ""))
-						end
-					),
+					short: (.key | gsub("Cam$"; "")),
 					camera_fps: (.value.camera_fps // 0),
 					detection_fps: (.value.detection_fps // 0),
 					skipped_fps: (.value.skipped_fps // 0),
