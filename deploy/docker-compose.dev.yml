@@ -21,8 +21,18 @@ services:
       HCC_WEB_BASE_URL: "http://hcc.example.local/downloads"
       HCC_VERSION_PATH: "/app/VERSION"
       HCC_RELEASE_CHANNEL: "stable"
+      HCC_SETTINGS_FILE: "/app/data/hcc-settings.env"
+      # Family board — phones manage via CalDAV (Calendar.app / Reminders)
+      HCC_CALDAV_URL: "${HCC_CALDAV_URL:-http://caldav:5232}"
+      HCC_CALDAV_USER: "${HCC_CALDAV_USER:-family}"
+      HCC_CALDAV_PASSWORD: "${HCC_CALDAV_PASSWORD:-}"
+      HCC_CALDAV_EVENTS_CALENDAR: "${HCC_CALDAV_EVENTS_CALENDAR:-/family/family/}"
+      HCC_CALDAV_CHORES_CALENDAR: "${HCC_CALDAV_CHORES_CALENDAR:-/family/chores/}"
+      HCC_CALDAV_VERIFY_TLS: "${HCC_CALDAV_VERIFY_TLS:-false}"
     ports:
       - "18080:8080"
+    depends_on:
+      - caldav
   agent:
     image: python:3.11-slim
     restart: unless-stopped
@@ -64,5 +74,18 @@ services:
       - web
       - core
 
+  # Apple Calendar / Reminders write here; HCC Core only reads for wall/Family display.
+  caldav:
+    image: tomsquest/docker-radicale:3.5.0.0
+    restart: unless-stopped
+    ports:
+      - "15232:5232"
+    volumes:
+      - hcc-caldav-data:/data
+      - ./radicale:/config:ro
+    security_opt:
+      - no-new-privileges:true
+
 volumes:
   hcc-core-data:
+  hcc-caldav-data:

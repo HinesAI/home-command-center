@@ -72,11 +72,16 @@ PUBLIC_GET_PATHS = {
     "/api/v1/integrations/weather",
     "/api/v1/integrations/security",
     "/api/v1/integrations/climate",
+    "/api/v1/integrations/family",
+    "/api/v1/integrations/family/calendar.ics",
     "/api/v1/integrations/network",
     "/api/v1/system/version",
+    "/api/v1/collectors",
 }
+PUBLIC_COLLECTORS_PREFIX = "/api/v1/collectors/"
 PUBLIC_POST_PATHS = {"/api/v1/auth/login", "/api/v1/agent/heartbeat", "/api/v1/agent/action-result"}
 PUBLIC_FRIGATE_CAMERA_PREFIX = "/api/v1/integrations/frigate/camera/"
+PUBLIC_FRIGATE_EVENT_PREFIX = "/api/v1/integrations/frigate/events/"
 
 _sessions = {}
 _sessions_lock = threading.Lock()
@@ -181,7 +186,11 @@ def user_may_execute_action(user, action_id):
 def route_required_role(method, path):
     if method == "GET" and path in PUBLIC_GET_PATHS:
         return None
+    if method == "GET" and path.startswith(PUBLIC_COLLECTORS_PREFIX):
+        return None
     if method == "GET" and path.startswith(PUBLIC_FRIGATE_CAMERA_PREFIX) and path.endswith("/latest.jpg"):
+        return None
+    if method == "GET" and path.startswith(PUBLIC_FRIGATE_EVENT_PREFIX):
         return None
     if method == "POST" and path in PUBLIC_POST_PATHS:
         return None
@@ -194,6 +203,10 @@ def route_required_role(method, path):
     if path == "/api/v1/actions/execute" and method == "POST":
         return "operator"
     if path == "/api/v1/integrations/climate/set" and method == "POST":
+        return "operator"
+    if path.startswith("/api/v1/integrations/frigate/recording") and method == "POST":
+        return "operator"
+    if path.startswith("/api/v1/integrations/family/") and method == "POST":
         return "operator"
     if path.startswith("/api/v1/"):
         return "observer"

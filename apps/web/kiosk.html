@@ -5,112 +5,134 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#060b12" />
     <title>HCC | Kiosk</title>
-    <link rel="stylesheet" href="./styles.css?v=25" />
-    <link rel="stylesheet" href="./kiosk.css?v=5" />
+    <link rel="stylesheet" href="./styles.css?v=28" />
+    <link rel="stylesheet" href="./kiosk.css?v=14" />
   </head>
   <body class="kiosk-mode">
     <div class="kiosk-shell">
-      <header class="kiosk-header" aria-label="Home kiosk header">
+      <header class="kiosk-header" aria-label="Wall kiosk header">
         <div class="kiosk-header-main">
           <div id="appBrand"></div>
         </div>
+        <nav class="kiosk-view-toggle" aria-label="Kiosk views">
+          <button type="button" class="kiosk-view-btn is-active" data-view="home" id="kioskViewHomeBtn">Home</button>
+          <button type="button" class="kiosk-view-btn" data-view="family" id="kioskViewFamilyBtn">Family</button>
+        </nav>
         <time class="kiosk-clock" id="wallClock" datetime="">
           <span id="wallClockTime" class="kiosk-clock-time">--:--</span>
           <span id="wallClockDate" class="kiosk-clock-date">---</span>
         </time>
         <div class="kiosk-header-links">
-          <a class="kiosk-variant" href="./kiosk-compact.html" title="Compact layout for iPad mini">Mini</a>
           <a class="kiosk-exit" href="./index.html" title="Open full dashboard">Dashboard</a>
         </div>
       </header>
 
-      <main class="kiosk-grid">
-        <div class="kiosk-left">
-          <section class="kiosk-panel kiosk-weather" aria-label="Weather forecast">
-            <section class="weather-hero kiosk-weather-hero" id="kioskWeatherHero" data-condition="loading">
-              <div class="weather-hero-glow" aria-hidden="true"></div>
-              <div class="weather-current kiosk-weather-current">
-                <div class="weather-current-main">
-                  <div class="weather-icon-wrap" id="kioskWeatherIcon" aria-hidden="true"></div>
-                  <div class="weather-current-copy">
-                    <p class="eyebrow" id="kioskWeatherLocation">Loading weather...</p>
-                    <div class="weather-temp-line">
-                      <span class="weather-temp" id="kioskWeatherTemp">--</span><span class="weather-temp-unit">°F</span>
+      <div class="kiosk-pages" id="kioskPages">
+        <main class="kiosk-page is-active" id="kioskPageHome" data-view="home">
+          <div class="kiosk-grid">
+            <div class="kiosk-stack">
+              <section class="kiosk-panel kiosk-weather" aria-label="Weather forecast">
+                <section class="weather-hero kiosk-weather-hero" id="kioskWeatherHero" data-condition="loading">
+                  <div class="weather-hero-glow" aria-hidden="true"></div>
+                  <div class="weather-current kiosk-weather-current">
+                    <div class="weather-current-main">
+                      <div class="weather-icon-wrap" id="kioskWeatherIcon" aria-hidden="true"></div>
+                      <div class="weather-current-copy">
+                        <p class="eyebrow" id="kioskWeatherLocation">Loading weather...</p>
+                        <div class="weather-temp-line">
+                          <span class="weather-temp" id="kioskWeatherTemp">--</span><span class="weather-temp-unit">°F</span>
+                        </div>
+                        <p class="weather-condition" id="kioskWeatherCondition">-</p>
+                      </div>
                     </div>
-                    <p class="weather-condition" id="kioskWeatherCondition">-</p>
+                    <div class="weather-now-stats kiosk-weather-stats">
+                      <div class="weather-stat"><span>Feels</span><strong id="kioskWeatherFeels">-</strong></div>
+                      <div class="weather-stat"><span>Wind</span><strong id="kioskWeatherWind">-</strong></div>
+                      <div class="weather-stat"><span>Hum</span><strong id="kioskWeatherHumidity">-</strong></div>
+                      <div class="weather-stat"><span>UV</span><strong id="kioskWeatherUv">-</strong></div>
+                    </div>
                   </div>
+                  <div class="weather-daily-wrap kiosk-weather-daily-wrap">
+                    <div class="weather-daily-header kiosk-weather-daily-header">
+                      <h2>7-day</h2>
+                      <span id="kioskWeatherUpdated" class="cell-sub">-</span>
+                    </div>
+                    <div class="weather-daily kiosk-weather-daily" id="kioskWeatherDaily">
+                      <p class="empty-state">Loading forecast...</p>
+                    </div>
+                  </div>
+                </section>
+              </section>
+
+              <section class="kiosk-panel kiosk-climate" aria-label="Climate controls">
+                <div class="kiosk-panel-head">
+                  <h2>Climate</h2>
+                  <span id="kioskClimateStatus" class="status-pill">-</span>
                 </div>
-                <div class="weather-now-stats kiosk-weather-stats">
-                  <div class="weather-stat"><span>Feels like</span><strong id="kioskWeatherFeels">-</strong></div>
-                  <div class="weather-stat"><span>Wind</span><strong id="kioskWeatherWind">-</strong></div>
-                  <div class="weather-stat"><span>Humidity</span><strong id="kioskWeatherHumidity">-</strong></div>
-                  <div class="weather-stat"><span>UV</span><strong id="kioskWeatherUv">-</strong></div>
+                <div class="kiosk-climate-grid" id="kioskClimateCards">
+                  <p class="empty-state">Loading thermostat...</p>
                 </div>
+              </section>
+            </div>
+
+            <section class="kiosk-panel kiosk-security security-section" aria-labelledby="kioskSecurityTitle">
+              <div class="kiosk-panel-head">
+                <h2 id="kioskSecurityTitle">Doors &amp; cameras</h2>
+                <span id="kioskSecurityStatus" class="status-pill">-</span>
               </div>
-              <div class="weather-daily-wrap kiosk-weather-daily-wrap">
-                <div class="weather-daily-header">
-                  <h2>7-day forecast</h2>
-                  <span id="kioskWeatherUpdated" class="cell-sub">-</span>
+              <div class="kiosk-door-strip" aria-label="Door sensors">
+                <div id="kioskDoorList" class="door-list door-list--strip"></div>
+                <span id="kioskDoorSummary" class="kiosk-door-summary cell-sub">-</span>
+              </div>
+              <div class="camera-panel kiosk-camera-panel" aria-label="Camera previews">
+                <div class="panel-heading">
+                  <h3>Cameras</h3>
+                  <span id="kioskCameraSummary">-</span>
                 </div>
-                <div class="weather-daily kiosk-weather-daily" id="kioskWeatherDaily">
-                  <p class="empty-state">Loading forecast...</p>
-                </div>
+                <div id="kioskCameraPreviews" class="camera-grid kiosk-camera-grid"></div>
               </div>
             </section>
-          </section>
-
-          <section class="kiosk-panel kiosk-automations" aria-label="Home automations">
-            <div class="kiosk-panel-head">
-              <div>
-                <p class="eyebrow">Home</p>
-                <h2>Automations</h2>
-                <p class="cell-sub">Climate and smart home controls</p>
-              </div>
-            </div>
-            <div class="kiosk-automation-grid" id="kioskClimateCards">
-              <p class="empty-state">Loading thermostat...</p>
-            </div>
-          </section>
-        </div>
-
-        <section class="kiosk-panel kiosk-security security-section" aria-labelledby="kioskSecurityTitle">
-          <div class="kiosk-panel-head">
-            <div>
-              <p class="eyebrow">Security</p>
-              <h2 id="kioskSecurityTitle">Doors &amp; cameras</h2>
-              <p id="kioskSecurityMeta" class="cell-sub">Door sensors and live camera snapshots</p>
-            </div>
-            <span id="kioskSecurityStatus" class="status-pill">-</span>
           </div>
-          <div class="kiosk-security-layout security-layout">
-            <div class="door-panel kiosk-door-panel" aria-label="Door sensors">
-              <div class="panel-heading">
-                <h3>Doors</h3>
-                <span id="kioskDoorSummary">-</span>
+        </main>
+
+        <main class="kiosk-page" id="kioskPageFamily" data-view="family" hidden>
+          <div class="kiosk-family">
+            <section class="kiosk-panel kiosk-family-calendar" aria-label="Family calendar">
+              <div class="kiosk-panel-head">
+                <div class="kiosk-cal-nav">
+                  <button type="button" class="kiosk-cal-nav-btn" id="kioskCalPrev" aria-label="Previous month">‹</button>
+                  <h2 id="kioskCalTitle">Calendar</h2>
+                  <button type="button" class="kiosk-cal-nav-btn" id="kioskCalNext" aria-label="Next month">›</button>
+                </div>
+                <span id="kioskFamilyStatus" class="status-pill">-</span>
               </div>
-              <div id="kioskDoorList" class="door-list">
-                <p class="empty-state">Loading door sensors...</p>
+              <div class="kiosk-cal-weekdays" aria-hidden="true">
+                <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
               </div>
-            </div>
-            <div class="camera-panel kiosk-camera-panel" aria-label="Camera previews">
-              <div class="panel-heading">
-                <h3>Cameras</h3>
-                <span id="kioskCameraSummary">-</span>
-              </div>
-              <div id="kioskCameraPreviews" class="camera-grid kiosk-camera-grid">
-                <p class="empty-state">Loading camera previews...</p>
-              </div>
-            </div>
+              <div class="kiosk-cal-grid" id="kioskCalGrid"></div>
+            </section>
+
+            <aside class="kiosk-family-side">
+              <section class="kiosk-panel kiosk-family-agenda" aria-label="Selected day">
+                <div class="kiosk-panel-head kiosk-agenda-head">
+                  <h2 id="kioskAgendaTitle">Today</h2>
+                  <span id="kioskAgendaCount" class="cell-sub">-</span>
+                </div>
+                <div class="kiosk-family-list" id="kioskAgendaList">
+                  <p class="empty-state">No events</p>
+                </div>
+              </section>
+            </aside>
           </div>
-        </section>
-      </main>
+        </main>
+      </div>
 
       <footer class="kiosk-footer"><span id="kioskErrorLabel"></span></footer>
     </div>
 
-    <script src="./common.js?v=23"></script>
-    <script src="./glance.js?v=2"></script>
+    <script src="./common.js?v=26"></script>
+    <script src="./glance.js?v=3"></script>
     <script src="./climate.js?v=3"></script>
-    <script src="./kiosk.js?v=6"></script>
+    <script src="./kiosk.js?v=11"></script>
   </body>
 </html>

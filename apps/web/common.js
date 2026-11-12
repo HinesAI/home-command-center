@@ -2,12 +2,17 @@ function resolveCoreBaseUrl() {
   if (window.HCC_CORE_BASE_URL) return window.HCC_CORE_BASE_URL;
   const protocol = window.location.protocol;
   const host = window.location.hostname;
-  // Canonical hostname: UI + API share origin via Caddy (/api → core)
-  if (host === "hcc.example.local") {
+  // Canonical hostnames: UI + API share origin via Caddy (/api → core)
+  if (host === "hcc.example.local" || host === "hcctest.example.local") {
     return window.location.origin;
   }
+  const port = window.location.port;
+  // Playground direct port access (web:3001 → core:18081)
+  if (port === "3001") {
+    return `${protocol}//${host}:18081`;
+  }
   const knownCoreHosts = new Set(["192.168.1.10", "example.local"]);
-  if (knownCoreHosts.has(host) || host === "192.168.1.10") {
+  if (knownCoreHosts.has(host) || host === "192.168.1.14") {
     return `${protocol}//192.168.1.10:18080`;
   }
   return `${protocol}//${host}:18080`;
@@ -308,7 +313,7 @@ function bindLogoutButton() {
 const APP_NAV_LINKS = [
   { id: "overview", href: "./index.html", label: "Overview" },
   { id: "kiosk", href: "./kiosk.html", label: "Kiosk" },
-  { id: "kiosk-compact", href: "./kiosk-compact.html", label: "Kiosk Mini" },
+  { id: "family", href: "./family.html", label: "Family" },
   { id: "devices", href: "./devices.html", label: "Enrolled Devices" },
   { id: "vms", href: "./vms.html", label: "Virtual Machines" },
   { id: "containers", href: "./containers.html", label: "Docker Containers" },

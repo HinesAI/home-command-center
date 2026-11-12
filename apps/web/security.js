@@ -4,6 +4,26 @@ const PREVIEW_REFRESH_MS = 2500;
 let securityPayload = { services: [], totals: {} };
 let activePanel = "overview";
 let previewRefreshTimer = null;
+let recordingControlUser = null;
+let recordingPending = false;
+
+function canControlRecording(user) {
+  if (!user) return false;
+  if (user.isLocalAdmin) return true;
+  const rank = { observer: 0, operator: 1, maintainer: 2, deployer: 3 };
+  return (rank[user.role] || 0) >= 1;
+}
+
+async function ensureRecordingAuth() {
+  if (recordingControlUser !== null) return recordingControlUser;
+  try {
+    const body = await fetchCurrentUser();
+    recordingControlUser = body.user || null;
+  } catch (_err) {
+    recordingControlUser = null;
+  }
+  return recordingControlUser;
+}
 
 function paintSecuritySubNav(active) {
   paintSubNav(
@@ -66,8 +86,14 @@ function buildSecurityCard(service) {
   if (service.id === "frigate") {
     if (details.version) detailLines.push(`Version ${details.version}`);
     detailLines.push(
-      `${details.cameraCount || 0} camera(s), ${details.onlineCameraCount || 0} online, ${details.detectionEnabledCount || 0} detecting`,
+      `${details.cameraCount || 0} camera(s), ${details.onlineCameraCount || 0} online, ${
+        details.detectionEnabledCount || 0
+      } detecting, ${details.recordingEnabledCount || 0} recording`,
     );
+    const schedule = details.schedule || {};
+    if (schedule.window) {
+      detailLines.push(`Schedule ${schedule.window}${schedule.active ? " (in window)" : ""}`);
+    }
   } else if (service.id === "home-assistant") {
     const sensors = details.sensorCount || 0;
     if (details.sensorsConfigured) {
@@ -164,7 +190,7 @@ function paintCameraRows(tbody, frigate, compact = false) {
   if (!tbody) return;
   tbody.innerHTML = "";
   const cameras = (frigate && frigate.details && frigate.details.cameras) || [];
-  const colSpan = compact ? 3 : 5;
+  const colSpan = compact ? 3 : 6;
 
   if (!frigate || !frigate.online) {
     tbody.innerHTML = `<tr><td colspan="${colSpan}" class="empty-state">${frigate && frigate.error ? frigate.error : "Frigate is offline"}</td></tr>`;
@@ -188,7 +214,8 @@ function paintCameraRows(tbody, frigate, compact = false) {
       <td>${statusPillHtml(camera.online ? "online" : "offline", camera.online ? "ok" : "critical")}</td>
       <td>${camera.cameraFps != null ? Number(camera.cameraFps).toFixed(1) : "-"}</td>
       <td>${camera.detectionFps != null ? Number(camera.detectionFps).toFixed(1) : "-"}</td>
-      <td>${statusPillHtml(camera.detectionEnabled ? "enabled" : "disabled", camera.detectionEnabled ? "ok" : "warn")}</td>
+      <td>${statusPillHtml(camera.detectionEnabled ? "on" : "off", camera.detectionEnabled ? "ok" : "warn")}</td>
+      <td>${statusPillHtml(camera.recording ? "on" : "off", camera.recording ? "ok" : "muted")}</td>
     `;
     tbody.appendChild(tr);
   });
@@ -208,7 +235,9 @@ function paintOverviewCameraPreviews(frigate) {
   if (!container) return;
 
   const cameras = (frigate && frigate.details && frigate.details.cameras) || [];
-  const signature = cameras.map((camera) => `${camera.name}:${camera.online}:${camera.detectionEnabled}`).join("|");
+  const signature = cameras
+    .map((camera) => `${camera.name}:${camera.online}:${camera.detectionEnabled}:${camera.recording}`)
+    .join("|");
 
   if (!frigate || !frigate.online) {
     stopPreviewRefresh();
@@ -254,12 +283,162 @@ function paintOverviewCameraPreviews(frigate) {
           onload="this.classList.remove('preview-error')"
         />
       </a>
-      <footer><strong>${camera.name}</strong><span>${camera.online ? "Live" : "offline"}</span></footer>
+      <footer><strong>${camera.name}</strong><span>${camera.recording ? "REC" : camera.online ? "Live" : "offline"}</span></footer>
     `;
     container.appendChild(tile);
   });
 
   startPreviewRefresh();
+}
+
+function mediaUrl(path) {
+  if (!path) return "";
+  if (path.startsWith("http://") || path.startsWith("https://")) return path;
+  return `${CORE_BASE_URL}${path}`;
+}
+
+function formatDetectionWhen(item) {
+  const local = item.start_time_local || item.startTimeLocal;
+  if (local) {
+    const date = new Date(local);
+    if (!Number.isNaN(date.getTime())) {
+      return date.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+    }
+    return String(local).replace("T", " ").slice(0, 16);
+  }
+  if (item.start_time) {
+    const date = new Date(Number(item.start_time) * 1000);
+    if (!Number.isNaN(date.getTime())) {
+      return date.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+    }
+  }
+  return "—";
+}
+
+function paintRecordingBar(frigate, canControl) {
+  const details = (frigate && frigate.details) || {};
+  const bridge = details.bridge || {};
+  const schedule = details.schedule || {};
+  const recording = Boolean(details.allRecording);
+  const recordingCount = details.recordingEnabledCount || 0;
+  const windowLabel = schedule.window ? `Night window ${schedule.window}` : "Schedule unknown";
+  const zone = schedule.timezone ? ` · ${schedule.timezone}` : "";
+  const inWindow = schedule.active ? " · currently in window" : "";
+  const meta = !bridge.online
+    ? bridge.error || "HCC Bridge offline — recording controls unavailable"
+    : `${windowLabel}${zone}${inWindow}`;
+  const stateLabel = recording ? "recording" : "idle";
+  const stateTone = recording ? "ok" : "muted";
+
+  [
+    ["overviewRecordingMeta", meta],
+    ["frigateRecordingMeta", meta],
+  ].forEach(([id, text]) => setText(id, text));
+
+  ["overviewRecordingState", "frigateRecordingState"].forEach((id) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.className = `status-pill ${stateTone}`;
+    el.textContent = recording ? `ON · ${recordingCount}` : "OFF";
+    el.title = stateLabel;
+  });
+
+  document.querySelectorAll("[data-recording]").forEach((button) => {
+    button.disabled = recordingPending || !bridge.online || !canControl;
+    button.classList.toggle("disabled", button.disabled);
+    if (!canControl) button.title = "Sign in with operator access to change recording";
+    else if (!bridge.online) button.title = "HCC Bridge offline";
+    else button.title = "";
+  });
+}
+
+function paintDetections(containerId, metaId, frigate) {
+  const container = document.getElementById(containerId);
+  const meta = document.getElementById(metaId);
+  if (!container) return;
+  const items = (frigate && frigate.details && frigate.details.latestDetections) || [];
+  if (meta) meta.textContent = items.length ? `${items.length} recent` : "No recent alerts";
+  if (!frigate || !frigate.online) {
+    container.innerHTML = `<p class="empty-state">${frigate && frigate.error ? frigate.error : "Frigate is offline"}</p>`;
+    return;
+  }
+  if (!items.length) {
+    container.innerHTML = `<p class="empty-state">No detections yet.</p>`;
+    return;
+  }
+  container.innerHTML = items
+    .map((item) => {
+      const objects = (item.objects || []).join(", ") || item.label || "object";
+      const thumb = mediaUrl(item.thumbnailUrl || item.thumbnail_url);
+      const snapshot = mediaUrl(item.snapshotUrl || item.snapshot_url || thumb);
+      const clip = mediaUrl(item.clipUrl || item.clip_url);
+      const review = item.review_url || item.reviewUrl || (frigate && frigate.dashboardUrl) || "#";
+      return `<article class="detection-card">
+        <a class="detection-thumb" href="${snapshot}" target="_blank" rel="noopener" title="${item.camera || ""}">
+          <img src="${thumb}" alt="${objects} on ${item.camera || "camera"}" loading="lazy" />
+        </a>
+        <footer>
+          <strong>${item.camera || "Camera"}</strong>
+          <span>${objects} · ${formatDetectionWhen(item)}</span>
+          <div class="detection-links">
+            ${clip ? `<a href="${clip}" target="_blank" rel="noopener">Clip</a>` : ""}
+            <a href="${review}" target="_blank" rel="noopener">Review</a>
+          </div>
+        </footer>
+      </article>`;
+    })
+    .join("");
+}
+
+async function setRecordingEnabled(enabled) {
+  if (recordingPending) return;
+  recordingPending = true;
+  paintRecordingBar(serviceById("frigate"), true);
+  const errorLabel = document.getElementById("errorLabel");
+  try {
+    securityPayload = await apiFetch("/api/v1/integrations/frigate/recording", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ camera: "all", enabled }),
+    });
+    await paintSecurityPage();
+    if (errorLabel) errorLabel.textContent = "";
+  } catch (err) {
+    if (errorLabel) errorLabel.textContent = err.message || "Recording control failed";
+  } finally {
+    recordingPending = false;
+    paintRecordingBar(serviceById("frigate"), canControlRecording(recordingControlUser));
+  }
+}
+
+function wireRecordingButtons() {
+  document.querySelectorAll("[data-recording]").forEach((button) => {
+    if (button.dataset.wired) return;
+    button.dataset.wired = "1";
+    button.addEventListener("click", () => {
+      const enabled = button.dataset.recording === "on";
+      setRecordingEnabled(enabled);
+    });
+  });
+}
+
+async function paintSecurityPage() {
+  const frigate = serviceById("frigate");
+  const ha = serviceById("home-assistant");
+  const user = await ensureRecordingAuth();
+  const canControl = canControlRecording(user);
+  paintSecuritySummary();
+  paintSecurityCards();
+  paintOverviewPlatforms(frigate, ha);
+  paintOverviewCameraPreviews(frigate);
+  paintOverviewCameras(frigate);
+  paintOverviewDoors(ha);
+  paintFrigateCameras(frigate);
+  paintHaSensors(ha);
+  paintIntegrationLinks();
+  paintRecordingBar(frigate, canControl);
+  paintDetections("overviewDetections", "overviewDetectionMeta", frigate);
+  paintDetections("frigateDetections", "frigateDetectionMeta", frigate);
 }
 
 function paintOverviewPlatforms(frigate, ha) {
@@ -334,17 +513,7 @@ async function refreshSecurity() {
   const errorLabel = document.getElementById("errorLabel");
   try {
     securityPayload = await apiFetch(SECURITY_ENDPOINT);
-    const frigate = serviceById("frigate");
-    const ha = serviceById("home-assistant");
-    paintSecuritySummary();
-    paintSecurityCards();
-    paintOverviewPlatforms(frigate, ha);
-    paintOverviewCameraPreviews(frigate);
-    paintOverviewCameras(frigate);
-    paintOverviewDoors(ha);
-    paintFrigateCameras(frigate);
-    paintHaSensors(ha);
-    paintIntegrationLinks();
+    await paintSecurityPage();
     errorLabel.textContent = "";
     return Number(securityPayload.refreshSeconds || 60);
   } catch (err) {
@@ -358,6 +527,7 @@ async function loop() {
   initAppPage("security");
   paintSecuritySubNav(activePanel);
   showSecurityPanel(activePanel);
+  wireRecordingButtons();
   while (true) {
     const waitSec = await refreshSecurity();
     await new Promise((resolve) => setTimeout(resolve, Math.max(5, waitSec) * 1000));

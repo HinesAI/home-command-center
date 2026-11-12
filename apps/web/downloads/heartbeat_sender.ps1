@@ -116,7 +116,7 @@ function Get-AgentConfig {
         CoreUrl = $heartbeat
         NodeId = if ($envValues["HCC_AGENT_NODE_ID"]) { $envValues["HCC_AGENT_NODE_ID"] } else { $env:COMPUTERNAME }
         AgentId = if ($envValues["HCC_AGENT_ID"]) { $envValues["HCC_AGENT_ID"] } else { "agent-$($env:COMPUTERNAME)" }
-        AgentVersion = if ($envValues["HCC_AGENT_VERSION"]) { $envValues["HCC_AGENT_VERSION"] } else { "1.0.9" }
+        AgentVersion = if ($envValues["HCC_AGENT_VERSION"]) { $envValues["HCC_AGENT_VERSION"] } else { "1.0.10" }
         Interval = if ($envValues["HCC_AGENT_INTERVAL_SECONDS"]) { [int]$envValues["HCC_AGENT_INTERVAL_SECONDS"] } else { 120 }
         Services = $services
         StorageDrives = $drives

@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#060b12" />
+    <title>HCC | Family Board</title>
+    <link rel="stylesheet" href="./styles.css?v=28" />
+    <link rel="stylesheet" href="./family.css?v=2" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="./index.html"><span class="brand-mark">H</span><span><strong>Home Command Center</strong></span></a>
+        <nav id="appNav" class="app-nav"></nav>
+        <div class="session-tools">
+          <span id="authUserLabel" class="user-label"></span>
+          <a id="adminNavLink" href="./admin.html">Admin</a>
+          <button id="logoutBtn" type="button">Logout</button>
+        </div>
+      </header>
+
+      <main class="dashboard page-grid family-page">
+        <section class="page-title">
+          <div>
+            <p class="eyebrow">Household</p>
+            <h1>Family Board</h1>
+            <p>Wall display of your shared calendar and chores. Add and edit on phones with <strong>Calendar.app</strong> and <strong>Reminders</strong> — not this page.</p>
+          </div>
+          <div class="section-actions">
+            <a class="section-link" href="./kiosk.html?view=family">Open wall Family</a>
+            <span id="familyStatus" class="status-pill">-</span>
+            <span id="familyUpdated">Updated: -</span>
+          </div>
+        </section>
+
+        <section class="stat-grid">
+          <article class="stat-card"><span>Upcoming</span><strong id="statEvents">-</strong><small>Calendar events</small></article>
+          <article class="stat-card"><span>Open chores</span><strong id="statChores">-</strong><small>Still to do</small></article>
+          <article class="stat-card"><span>Done</span><strong id="statDone">-</strong><small>Completed chores</small></article>
+        </section>
+
+        <section class="overview-section" id="caldavSetup">
+          <div class="section-header">
+            <h2>Manage on iPhone / iPad / Mac</h2>
+          </div>
+          <p class="section-note" id="caldavHint">Loading CalDAV status…</p>
+          <ol class="family-setup-steps" id="caldavSteps">
+            <li>Settings → Calendar → Accounts → Add Account → Other → <strong>Add CalDAV Account</strong></li>
+            <li>Server: <code id="caldavServer">caldav.example.local</code> (or LAN IP port <code>15232</code>)</li>
+            <li>Username / password: from Admin → Family calendar (or <code>deploy/.env</code>)</li>
+            <li>Create events on the <strong>Family</strong> calendar; chores via <strong>Reminders</strong> or the <strong>Chores</strong> calendar</li>
+          </ol>
+          <p class="family-ics-url"><span class="cell-sub">Read-only ICS mirror</span><code id="icsUrl">-</code></p>
+        </section>
+
+        <section class="overview-section" id="localEditSection" hidden>
+          <div class="section-header">
+            <h2>Temporary local edit</h2>
+          </div>
+          <p class="section-note">CalDAV is not connected yet. You can seed items here from a signed-in operator, then switch phones to Calendar.app once CalDAV is up.</p>
+          <form id="eventForm" class="family-form">
+            <label>Title<input name="title" required placeholder="Soccer practice" /></label>
+            <label>Start<input name="start" type="datetime-local" required /></label>
+            <label>End<input name="end" type="datetime-local" /></label>
+            <label>Location<input name="location" placeholder="Optional" /></label>
+            <label class="family-check"><input name="allDay" type="checkbox" /> All day</label>
+            <label class="family-span">Notes<textarea name="notes" rows="2" placeholder="Optional"></textarea></label>
+            <button type="submit">Add event</button>
+          </form>
+          <form id="choreForm" class="family-form" style="margin-top: 16px">
+            <label>Chore<input name="title" required placeholder="Take out trash" /></label>
+            <label>Who<input name="assignee" placeholder="Name (optional)" /></label>
+            <label>Due<input name="due" type="date" /></label>
+            <label class="family-span">Notes<textarea name="notes" rows="2"></textarea></label>
+            <button type="submit">Add chore</button>
+          </form>
+        </section>
+
+        <section class="overview-section">
+          <div class="section-header">
+            <h2>Upcoming events</h2>
+          </div>
+          <div id="eventList" class="family-list">
+            <p class="empty-state">Loading...</p>
+          </div>
+        </section>
+
+        <section class="overview-section">
+          <div class="section-header">
+            <h2>Chores</h2>
+          </div>
+          <div id="choreList" class="family-list">
+            <p class="empty-state">Loading...</p>
+          </div>
+        </section>
+      </main>
+      <footer class="page-footer"><span id="errorLabel"></span></footer>
+    </div>
+    <script src="./common.js?v=26"></script>
+    <script src="./family.js?v=2"></script>
+  </body>
+</html>

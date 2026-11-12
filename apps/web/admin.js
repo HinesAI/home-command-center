@@ -1,6 +1,320 @@
 let inventory = [];
 let releases = [];
+let platformSettings = null;
 const selectedHostIds = new Set();
+const settingsDraft = new Map();
+const ADMIN_PANELS = ["overview", "agents", "collectors", "settings"];
+let updateLogCount = 0;
+
+function showAdminPanel(panelId) {
+  const active = ADMIN_PANELS.includes(panelId) ? panelId : "overview";
+  ADMIN_PANELS.forEach((id) => {
+    const panel = document.querySelector(`.admin-panel[data-admin-panel="${id}"]`);
+    const link = document.querySelector(`#adminSubNav [data-admin-panel="${id}"]`);
+    if (panel) panel.classList.toggle("hidden-panel", id !== active);
+    if (link) link.classList.toggle("active", id === active);
+  });
+  if (window.history && window.history.replaceState) {
+    window.history.replaceState(null, "", `#${active}`);
+  }
+}
+
+function initAdminTabs() {
+  const initial = (window.location.hash || "#overview").replace("#", "");
+  showAdminPanel(initial);
+  document.getElementById("adminSubNav")?.addEventListener("click", (event) => {
+    const link = event.target.closest("[data-admin-panel]");
+    if (!link) return;
+    event.preventDefault();
+    showAdminPanel(link.dataset.adminPanel);
+  });
+  window.addEventListener("hashchange", () => {
+    const panelId = (window.location.hash || "#overview").replace("#", "");
+    if (ADMIN_PANELS.includes(panelId)) showAdminPanel(panelId);
+  });
+}
+
+function adminGlanceCard(title, value, meta, tone = "ok") {
+  return `
+    <article class="admin-glance-card">
+      <p class="eyebrow">${escapeHtml(title)}</p>
+      <strong class="admin-glance-value">${escapeHtml(value)}</strong>
+      <p class="admin-glance-meta"><span class="status-pill ${tone}">${escapeHtml(meta)}</span></p>
+    </article>
+  `;
+}
+
+function paintAdminOverviewGlance() {
+  const container = document.getElementById("adminOverviewGlance");
+  if (!container) return;
+  const migration = platformSettings?.migration;
+  const collectors = platformSettings?.collectors?.collectors || [];
+  const collectorErrors = collectors.filter((row) => row.status === "error").length;
+  const collectorOk = collectors.filter((row) => row.status === "ok").length;
+  const outdated = inventory.filter((row) => row.updateAvailable && !row.stale).length;
+  const queued = inventory.filter((row) => row.pendingUpdateCount > 0).length;
+  const stale = inventory.filter((row) => row.stale).length;
+  const routingLabel = migration?.fullyMigrated ? "collector-only" : migration?.defaultSource || "legacy";
+  const routingTone = migration?.fullyMigrated ? "ok" : "warn";
+
+  container.innerHTML = [
+    adminGlanceCard("Fleet agents", String(inventory.length), `${outdated} outdated · ${stale} stale`, outdated ? "warn" : "ok"),
+    adminGlanceCard("Update queue", String(queued), `${updateLogCount} recent events`, queued ? "warn" : "ok"),
+    adminGlanceCard("Collectors", `${collectorOk}/${collectors.length || 0}`, collectorErrors ? `${collectorErrors} errors` : "runtime active", collectorErrors ? "critical" : "ok"),
+    adminGlanceCard("API routing", routingLabel, migration?.fullyMigrated ? "greenlit" : "legacy default", routingTone),
+  ].join("");
+}
+
+function paintRoutingTable(migration) {
+  const wrap = document.getElementById("settingsRoutingTable");
+  if (!wrap) return;
+  const services = migration?.services || [];
+  if (!services.length) {
+    wrap.innerHTML = "";
+    return;
+  }
+  const rows = services
+    .map((service) => {
+      const sourceTone = service.source === "collector-only" ? "ok" : service.source === "collector" ? "warn" : "muted";
+      return `<tr>
+        <td>${escapeHtml(service.service)}</td>
+        <td>${statusPillHtml(service.source, sourceTone)}</td>
+        <td>${statusPillHtml(service.legacyPullEnabled ? "enabled" : "disabled", service.legacyPullEnabled ? "warn" : "ok")}</td>
+        <td><code>${escapeHtml(service.collectorId || "—")}</code></td>
+      </tr>`;
+    })
+    .join("");
+  wrap.innerHTML = `
+    <div class="section-header"><h3>Per-service routing</h3></div>
+    <div class="table-wrap">
+      <table class="fleet-table">
+        <thead><tr><th>Service</th><th>API source</th><th>Legacy pull</th><th>Collector</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+function setCollectorActionStatus(message, isError = false) {
+  const el = document.getElementById("collectorActionStatus");
+  if (!el) return;
+  el.textContent = message || "";
+  el.className = isError ? "admin-status error" : "admin-status";
+}
+
+function setSettingsStatus(message, isError = false) {
+  const el = document.getElementById("settingsStatus");
+  if (!el) return;
+  el.textContent = message || "";
+  el.className = isError ? "admin-status error" : "admin-status";
+}
+
+function collectorTone(status) {
+  if (status === "ok") return "ok";
+  if (status === "error") return "critical";
+  if (status === "idle") return "muted";
+  return "warn";
+}
+
+function paintCollectorStatusCards(collectorsPayload) {
+  const container = document.getElementById("collectorStatusCards");
+  if (!container) return;
+  container.innerHTML = "";
+  const collectors = (collectorsPayload && collectorsPayload.collectors) || [];
+  if (!collectors.length) {
+    container.innerHTML = `<div class="release-card"><div class="release-meta">Collector runtime disabled.</div></div>`;
+    return;
+  }
+  collectors.forEach((collector) => {
+    const card = document.createElement("div");
+    card.className = "release-card";
+    const tone = collectorTone(collector.status);
+    card.innerHTML = `
+      <div class="release-title">${escapeHtml(collector.id)}</div>
+      <div class="release-version">${escapeHtml(collector.type)}</div>
+      <div class="release-meta"><span class="status-pill ${tone}">${escapeHtml(collector.status || "idle")}</span></div>
+      <div class="release-meta">${escapeHtml(String(collector.recordCount ?? "—"))} records · ${collector.intervalSeconds || "?"}s</div>
+      <div class="release-meta">${collector.lastError ? escapeHtml(collector.lastError) : `Last run ${escapeHtml(collector.lastRunAt || "—")}`}</div>
+    `;
+    container.appendChild(card);
+  });
+}
+
+function paintMigrationBanner(migration) {
+  const banner = document.getElementById("settingsMigrationBanner");
+  const summary = document.getElementById("settingsSummary");
+  if (!banner || !migration) return;
+  const migrated = (migration.migratedServices || []).join(", ") || "none";
+  banner.innerHTML = `
+    <div class="settings-banner-card">
+      <strong>Integration routing</strong>
+      <span>Default source: <code>${escapeHtml(migration.defaultSource || "legacy")}</code></span>
+      <span>Migrated: <code>${escapeHtml(migrated)}</code></span>
+      <span>${migration.fullyMigrated ? "Fully on collectors" : "Dashboard APIs still on legacy until greenlight"}</span>
+    </div>
+  `;
+  if (summary) {
+    summary.textContent = migration.fullyMigrated ? "collector-only" : migration.defaultSource || "legacy";
+    summary.className = `status-pill ${migration.fullyMigrated ? "ok" : "warn"}`;
+  }
+}
+
+function paintSettingsActions(actions) {
+  const container = document.getElementById("settingsActions");
+  if (!container) return;
+  container.innerHTML = "";
+  (actions || []).forEach((action) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = action.id.includes("rollback") ? "action-button secondary" : "action-button warn";
+    button.textContent = action.label;
+    button.title = action.description || "";
+    button.dataset.actionId = action.id;
+    button.addEventListener("click", () => runSettingsAction(action.id));
+    container.appendChild(button);
+  });
+}
+
+function settingsInputId(key) {
+  return `setting-${key.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+}
+
+function paintSettingsGroups(payload) {
+  const container = document.getElementById("settingsGroups");
+  if (!container || !payload) return;
+  container.innerHTML = "";
+  settingsDraft.clear();
+  (payload.schema.groups || []).forEach((group, index) => {
+    const section = document.createElement("details");
+    section.className = "settings-group";
+    section.open = index === 0;
+    section.innerHTML = `
+      <summary class="settings-group-summary">
+        <span class="settings-group-title">${escapeHtml(group.label)}</span>
+        <span class="settings-group-count">${(group.fields || []).length} options</span>
+      </summary>
+      <div class="settings-group-body">
+        <p class="settings-group-description">${escapeHtml(group.description || "")}</p>
+        <div class="settings-grid"></div>
+      </div>
+    `;
+    const grid = section.querySelector(".settings-grid");
+    (group.fields || []).forEach((field) => {
+      const valueEntry = payload.values[field.key] || { value: field.default || "" };
+      const currentValue = valueEntry.value ?? field.default ?? "";
+      settingsDraft.set(field.key, currentValue);
+      const fieldEl = document.createElement("label");
+      fieldEl.className = "settings-field";
+      fieldEl.htmlFor = settingsInputId(field.key);
+      let control = "";
+      if (field.type === "bool" || (field.type === "enum" && field.options && field.options.length)) {
+        const options = field.type === "bool" ? ["true", "false"] : field.options;
+        control = `<select id="${settingsInputId(field.key)}" data-setting-key="${field.key}">
+          ${options
+            .map((option) => `<option value="${escapeHtml(option)}" ${String(currentValue) === option ? "selected" : ""}>${escapeHtml(option)}</option>`)
+            .join("")}
+        </select>`;
+      } else if (field.secret) {
+        control = `<input id="${settingsInputId(field.key)}" data-setting-key="${field.key}" type="password" value="" placeholder="${escapeHtml(valueEntry.configured ? "Leave blank to keep current" : "Not configured")}" autocomplete="new-password" />`;
+      } else {
+        control = `<input id="${settingsInputId(field.key)}" data-setting-key="${field.key}" type="${field.type === "int" || field.type === "float" ? "number" : "text"}" value="${escapeHtml(String(currentValue))}" />`;
+      }
+      const meta = [
+        field.cliFlag ? `<code>${escapeHtml(field.cliFlag)}</code>` : "",
+        field.hotReload ? "hot reload" : "",
+        field.restartRequired ? "restart required" : "",
+      ]
+        .filter(Boolean)
+        .join(" · ");
+      fieldEl.innerHTML = `
+        <span class="settings-label">${escapeHtml(field.label)}</span>
+        ${control}
+        <small>${escapeHtml(field.description || field.key)}</small>
+        ${meta ? `<small class="settings-meta">${meta}</small>` : ""}
+      `;
+      grid.appendChild(fieldEl);
+    });
+    container.appendChild(section);
+  });
+}
+
+function collectSettingsUpdates() {
+  const updates = {};
+  document.querySelectorAll("[data-setting-key]").forEach((input) => {
+    const key = input.dataset.settingKey;
+    const original = settingsDraft.get(key);
+    const value = input.value;
+    if (input.type === "password") {
+      if (!value) return;
+      updates[key] = value;
+      return;
+    }
+    if (String(original ?? "") !== String(value ?? "")) {
+      updates[key] = value;
+    }
+  });
+  return updates;
+}
+
+async function loadSettings() {
+  platformSettings = await apiFetch("/api/v1/admin/settings");
+  paintMigrationBanner(platformSettings.migration);
+  paintCollectorStatusCards(platformSettings.collectors);
+  paintRoutingTable(platformSettings.migration);
+  paintSettingsActions(platformSettings.actions);
+  paintSettingsGroups(platformSettings);
+  paintAdminOverviewGlance();
+}
+
+async function saveSettings() {
+  const updates = collectSettingsUpdates();
+  if (!Object.keys(updates).length) {
+    setSettingsStatus("No changes to save.", true);
+    return;
+  }
+  setSettingsStatus("Saving settings...");
+  const result = await apiFetch("/api/v1/admin/settings", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ updates }),
+  });
+  if (!result.ok) {
+    setSettingsStatus((result.errors || [result.error || "Save failed"]).join("; "), true);
+    return;
+  }
+  const restartNote = result.restartRequired ? " Restart Core to apply collector runtime changes." : "";
+  setSettingsStatus(`Saved ${result.updated.length} setting(s) to ${result.settingsFile}.${restartNote}`);
+  await loadSettings();
+}
+
+async function runSettingsAction(actionId) {
+  const path =
+    actionId === "greenlight-collectors"
+      ? "/api/v1/admin/settings/actions/greenlight-collectors"
+      : actionId === "rollback-collectors"
+        ? "/api/v1/admin/settings/actions/rollback-collectors"
+        : null;
+  if (!path) return;
+  const label = actionId === "greenlight-collectors" ? "greenlight collector migration" : "rollback collector migration";
+  if (!window.confirm(`Run ${label}?`)) return;
+  setSettingsStatus(`Running ${label}...`);
+  setCollectorActionStatus(`Running ${label}...`);
+  const result = await apiFetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({}),
+  });
+  if (!result.ok) {
+    const message = (result.errors || [result.error || "Action failed"]).join("; ");
+    setSettingsStatus(message, true);
+    setCollectorActionStatus(message, true);
+    return;
+  }
+  const success = `${label} applied to ${(result.services || []).join(", ")}.${result.restartRequired ? " Restart Core if collector runtime flags changed." : ""}`;
+  setSettingsStatus(success);
+  setCollectorActionStatus(success);
+  await loadSettings();
+}
 
 function setStatus(message, isError = false) {
   const el = document.getElementById("pushStatus");
@@ -199,6 +513,7 @@ function paintInventory(items = null) {
     summary.textContent = `${visibleRows.length} of ${inventory.length} shown | ${selectedHostIds.size} selected | ${outdated} outdated | ${queued} queued | ${failed} failed`;
   }
   syncSelectAllState(visibleRows);
+  paintAdminOverviewGlance();
 }
 
 function paintUpdateLog(body) {
@@ -210,6 +525,8 @@ function paintUpdateLog(body) {
   if (!items.length) {
     tbody.innerHTML = `<tr><td colspan="6">No agent update activity yet.</td></tr>`;
     if (summary) summary.textContent = "0 events";
+    updateLogCount = 0;
+    paintAdminOverviewGlance();
     return;
   }
 
@@ -240,6 +557,8 @@ function paintUpdateLog(body) {
   if (summary) {
     summary.textContent = `${items.length} events | ${pendingNodes.length} host(s) with pending queue`;
   }
+  updateLogCount = items.length;
+  paintAdminOverviewGlance();
 }
 
 function truncate(value, max) {
@@ -281,6 +600,7 @@ async function loadAdminData() {
   paintVersionOptions(releases);
   paintInventory(inventoryBody.items || []);
   paintUpdateLog(updateLogBody);
+  await loadSettings();
 }
 
 async function pushUpdates({ nodeIds = null, useFilters = false }) {
@@ -370,6 +690,23 @@ document.getElementById("inventoryBody").addEventListener("change", (event) => {
 
 document.getElementById("applyFiltersBtn").addEventListener("click", () => paintInventory());
 
+document.getElementById("saveSettingsBtn")?.addEventListener("click", async () => {
+  try {
+    await saveSettings();
+  } catch (err) {
+    setSettingsStatus(err.message, true);
+  }
+});
+
+document.getElementById("reloadSettingsBtn")?.addEventListener("click", async () => {
+  try {
+    await loadSettings();
+    setSettingsStatus("Settings reloaded.");
+  } catch (err) {
+    setSettingsStatus(err.message, true);
+  }
+});
+
 ["filterPlatform", "filterGroup", "targetVersion", "onlyOutdated", "excludeStale"].forEach((id) => {
   document.getElementById(id).addEventListener("change", () => paintInventory());
 });
@@ -378,6 +715,7 @@ async function loop() {
   const user = await ensureAuth();
   initAppPage("");
   paintAppNav("");
+  initAdminTabs();
   if (user && user.role === "observer" && !user.isLocalAdmin) {
     window.location.href = "./index.html";
     return;

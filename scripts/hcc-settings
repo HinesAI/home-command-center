@@ -1,0 +1,182 @@
+#!/usr/bin/env python3
+"""Unified HCC settings CLI — same schema and persistence as the Admin GUI."""
+
+from __future__ import annotations
+
+import argparse
+import getpass
+import json
+import os
+import sys
+import urllib.error
+import urllib.request
+from http.cookiejar import CookieJar
+
+
+def core_base_url() -> str:
+    return os.environ.get("HCC_CORE_BASE_URL", "http://127.0.0.1:18080").rstrip("/")
+
+
+def login_session(base_url: str, username: str, password: str):
+    jar = CookieJar()
+    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+    payload = json.dumps({"username": username, "password": password}).encode("utf-8")
+    request = urllib.request.Request(
+        f"{base_url}/api/v1/auth/login",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with opener.open(request, timeout=20) as response:
+        json.load(response)
+    return opener
+
+
+def api_json(opener, method: str, path: str, body: dict | None = None):
+    data = None
+    headers = {}
+    if body is not None:
+        data = json.dumps(body).encode("utf-8")
+        headers["Content-Type"] = "application/json"
+    request = urllib.request.Request(f"{core_base_url()}{path}", data=data, headers=headers, method=method)
+    with opener.open(request, timeout=30) as response:
+        return json.load(response)
+
+
+def local_settings_module():
+    core_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "apps", "core"))
+    if core_dir not in sys.path:
+        sys.path.insert(0, core_dir)
+    import settings as hcc_settings  # noqa: WPS433
+
+    return hcc_settings
+
+
+def cmd_list(_args, opener):
+    payload = api_json(opener, "GET", "/api/v1/admin/settings")
+    for group in payload.get("schema", {}).get("groups", []):
+        print(f"[{group['id']}] {group['label']}")
+        for field in group.get("fields", []):
+            value = payload.get("values", {}).get(field["key"], {}).get("value", "")
+            print(f"  {field['key']}={value}")
+
+
+def cmd_get(args, opener):
+    payload = api_json(opener, "GET", "/api/v1/admin/settings")
+    value = payload.get("values", {}).get(args.key)
+    if not value:
+        print(f"{args.key} is not defined in the settings schema", file=sys.stderr)
+        sys.exit(1)
+    print(value.get("value", ""))
+
+
+def cmd_set(args, opener):
+    updates = {}
+    for item in args.pairs:
+        if "=" not in item:
+            print(f"invalid pair: {item}", file=sys.stderr)
+            sys.exit(1)
+        key, value = item.split("=", 1)
+        updates[key] = value
+    result = api_json(opener, "POST", "/api/v1/admin/settings", {"updates": updates})
+    print(json.dumps(result, indent=2))
+
+
+def cmd_schema(_args, opener):
+    payload = api_json(opener, "GET", "/api/v1/admin/settings")
+    print(json.dumps(payload.get("schema", {}), indent=2))
+
+
+def cmd_migration(_args, opener):
+    payload = api_json(opener, "GET", "/api/v1/admin/settings")
+    print(json.dumps(payload.get("migration", {}), indent=2))
+
+
+def cmd_collectors(_args, opener):
+    payload = api_json(opener, "GET", "/api/v1/admin/settings")
+    print(json.dumps(payload.get("collectors", {}), indent=2))
+
+
+def cmd_greenlight(args, opener):
+    body = {"services": args.services} if args.services else {}
+    result = api_json(opener, "POST", "/api/v1/admin/settings/actions/greenlight-collectors", body)
+    print(json.dumps(result, indent=2))
+
+
+def cmd_rollback(args, opener):
+    body = {"services": args.services} if args.services else {}
+    result = api_json(opener, "POST", "/api/v1/admin/settings/actions/rollback-collectors", body)
+    print(json.dumps(result, indent=2))
+
+
+def cmd_local_set(args):
+    hcc_settings = local_settings_module()
+    hcc_settings.load_runtime_settings_file()
+    updates = {}
+    for item in args.pairs:
+        key, value = item.split("=", 1)
+        updates[key] = value
+    result = hcc_settings.apply_settings(updates)
+    print(json.dumps(result, indent=2))
+
+
+def build_parser():
+    parser = argparse.ArgumentParser(description="HCC unified settings CLI")
+    parser.add_argument("--core-base-url", default=core_base_url(), help="HCC Core base URL")
+    parser.add_argument("--username", default=os.environ.get("HCC_CLI_USER", ""))
+    parser.add_argument("--password", default=os.environ.get("HCC_CLI_PASSWORD", ""))
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    sub.add_parser("list", help="List all settings and current values")
+    get_parser = sub.add_parser("get", help="Get one setting value")
+    get_parser.add_argument("key")
+    set_parser = sub.add_parser("set", help="Set one or more KEY=VALUE pairs")
+    set_parser.add_argument("pairs", nargs="+")
+    sub.add_parser("schema", help="Print settings schema JSON")
+    sub.add_parser("migration", help="Print integration routing / migration status")
+    sub.add_parser("collectors", help="Print collector runtime status")
+
+    greenlight = sub.add_parser("greenlight-collectors", help="Switch APIs to collector-only")
+    greenlight.add_argument("--service", dest="services", action="append")
+
+    rollback = sub.add_parser("rollback-collectors", help="Restore legacy integration routing")
+    rollback.add_argument("--service", dest="services", action="append")
+
+    local_set = sub.add_parser("local-set", help="Write settings overlay file without Core API")
+    local_set.add_argument("pairs", nargs="+")
+    return parser
+
+
+def main():
+    parser = build_parser()
+    args = parser.parse_args()
+    if args.command == "local-set":
+        cmd_local_set(args)
+        return
+
+    if args.core_base_url:
+        os.environ["HCC_CORE_BASE_URL"] = args.core_base_url
+
+    username = args.username or input("Username: ").strip()
+    password = args.password or getpass.getpass("Password: ")
+    try:
+        opener = login_session(core_base_url(), username, password)
+    except urllib.error.HTTPError as exc:
+        print(f"login failed: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+    commands = {
+        "list": cmd_list,
+        "get": cmd_get,
+        "set": cmd_set,
+        "schema": cmd_schema,
+        "migration": cmd_migration,
+        "collectors": cmd_collectors,
+        "greenlight-collectors": cmd_greenlight,
+        "rollback-collectors": cmd_rollback,
+    }
+    commands[args.command](args, opener)
+
+
+if __name__ == "__main__":
+    main()

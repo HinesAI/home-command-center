@@ -10,9 +10,7 @@ All notable HCC platform changes are recorded here. Versions follow Semantic Ver
 - Admin portal filtering improvements and host selection persistence
 - Portable Ubuntu LAN deployment package (Docker images + installer)
 - HCC Terminal physical-console client
-- Configurable product branding via `HCC_PRODUCT_NAME`
-- Guidance for keeping site secrets in a private deployment overlay
+- Dual-repository workflow (public `home-command-center` + private `HCCv2`)
 
 ### Changed
-- Official product name in shared code defaults to **Home Command Center**
 - Weather icons refreshed with consistent outlined SVG set

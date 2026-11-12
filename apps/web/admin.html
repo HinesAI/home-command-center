@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>HCC | Admin</title>
-    <link rel="stylesheet" href="./styles.css?v=24" />
+    <link rel="stylesheet" href="./styles.css?v=28" />
   </head>
   <body>
     <div class="app-shell">
@@ -17,54 +17,116 @@
           <button id="logoutBtn" type="button">Logout</button>
         </div>
       </header>
-      <main class="dashboard page-grid">
-        <section class="page-title">
-          <div><p class="eyebrow">Maintainer</p><h1>Admin</h1><p>Agent releases, inventory health, and maintainer-only operations.</p></div>
+      <main class="dashboard page-grid admin-page">
+        <section class="page-title admin-page-title">
+          <div>
+            <p class="eyebrow">Maintainer</p>
+            <h1>Admin</h1>
+            <p>Platform operations, agent fleet, collectors, and server configuration.</p>
+          </div>
           <span class="status-pill" id="adminUserPill">Signed in</span>
         </section>
-        <section class="overview-section">
-          <div class="section-header"><h2>Published releases</h2></div>
-          <div id="releaseCards" class="release-cards"></div>
+
+        <nav id="adminSubNav" class="subnav admin-subnav" aria-label="Admin sections">
+          <a href="#overview" data-admin-panel="overview" class="active">Overview</a>
+          <a href="#agents" data-admin-panel="agents">Agents</a>
+          <a href="#collectors" data-admin-panel="collectors">Collectors</a>
+          <a href="#settings" data-admin-panel="settings">Settings</a>
+        </nav>
+
+        <section id="adminPanelOverview" class="admin-panel" data-admin-panel="overview">
+          <div id="adminOverviewGlance" class="admin-glance-grid" aria-label="Admin summary"></div>
+          <section class="overview-section">
+            <div class="section-header"><h2>Published releases</h2></div>
+            <div id="releaseCards" class="release-cards"></div>
+          </section>
         </section>
-        <section class="overview-section">
-          <div class="section-header"><h2>Push agent update</h2><span class="status-pill warn">Queued on heartbeat</span></div>
-          <div class="admin-controls">
-            <label class="filter-field">Platform<select id="filterPlatform"><option value="all">All platforms</option><option value="windows">Windows</option><option value="linux">Linux</option></select></label>
-            <label class="filter-field">Group<select id="filterGroup"><option value="all">All hosts</option><option value="servers">Servers</option><option value="clients">Clients</option></select></label>
-            <label class="filter-field">Version<select id="targetVersion"><option value="">Latest per platform</option></select></label>
-            <label class="admin-check"><input id="onlyOutdated" type="checkbox" checked /> Only outdated hosts</label>
-            <label class="admin-check"><input id="excludeStale" type="checkbox" checked /> Skip stale hosts</label>
-            <button id="applyFiltersBtn" type="button" class="action-button secondary">Apply filters</button>
-          </div>
-          <div class="admin-actions">
-            <button id="pushFilteredBtn" type="button" class="action-button">Push to filtered hosts</button>
-            <button id="pushSelectedBtn" type="button" class="action-button warn">Push to selected hosts</button>
-          </div>
-          <div id="pushStatus" class="admin-status"></div>
+
+        <section id="adminPanelAgents" class="admin-panel hidden-panel" data-admin-panel="agents">
+          <section class="overview-section">
+            <div class="section-header">
+              <h2>Push agent update</h2>
+              <span class="status-pill warn">Queued on heartbeat</span>
+            </div>
+            <p class="section-note">Select hosts in the inventory below, or push to the current filter set.</p>
+            <div class="admin-controls">
+              <label class="filter-field">Platform<select id="filterPlatform"><option value="all">All platforms</option><option value="windows">Windows</option><option value="linux">Linux</option></select></label>
+              <label class="filter-field">Group<select id="filterGroup"><option value="all">All hosts</option><option value="servers">Servers</option><option value="clients">Clients</option></select></label>
+              <label class="filter-field">Version<select id="targetVersion"><option value="">Latest per platform</option></select></label>
+              <label class="admin-check"><input id="onlyOutdated" type="checkbox" checked /> Only outdated hosts</label>
+              <label class="admin-check"><input id="excludeStale" type="checkbox" checked /> Skip stale hosts</label>
+              <button id="applyFiltersBtn" type="button" class="action-button secondary">Apply filters</button>
+            </div>
+            <div class="admin-actions">
+              <button id="pushFilteredBtn" type="button" class="action-button">Push to filtered hosts</button>
+              <button id="pushSelectedBtn" type="button" class="action-button warn">Push to selected hosts</button>
+            </div>
+            <div id="pushStatus" class="admin-status"></div>
+          </section>
+
+          <section class="overview-section">
+            <div class="section-header">
+              <h2>Agent inventory</h2>
+              <span id="inventorySummary" class="status-pill">-</span>
+            </div>
+            <div class="table-wrap">
+              <table class="fleet-table">
+                <thead><tr><th><input id="selectAllHosts" type="checkbox" /></th><th>Host</th><th>Platform</th><th>Role</th><th>Current</th><th>Latest</th><th>Version</th><th>Update</th></tr></thead>
+                <tbody id="inventoryBody"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="overview-section">
+            <div class="section-header">
+              <h2>Update activity</h2>
+              <span id="updateLogSummary" class="status-pill">-</span>
+            </div>
+            <p class="section-note">Queued updates run on the agent&apos;s next heartbeat. Status persists across core restarts.</p>
+            <div class="table-wrap">
+              <table class="fleet-table">
+                <thead><tr><th>Host</th><th>Target</th><th>Status</th><th>When</th><th>Message</th><th>Request</th></tr></thead>
+                <tbody id="updateLogBody"></tbody>
+              </table>
+            </div>
+          </section>
         </section>
-        <section class="overview-section">
-          <div class="section-header"><h2>Update activity</h2><span id="updateLogSummary" class="status-pill">-</span></div>
-          <p class="section-note">Queued updates run on the agent&apos;s next heartbeat. Status persists across core restarts.</p>
-          <div class="table-wrap">
-            <table class="fleet-table">
-              <thead><tr><th>Host</th><th>Target</th><th>Status</th><th>When</th><th>Message</th><th>Request</th></tr></thead>
-              <tbody id="updateLogBody"></tbody>
-            </table>
-          </div>
+
+        <section id="adminPanelCollectors" class="admin-panel hidden-panel" data-admin-panel="collectors">
+          <section class="overview-section">
+            <div class="section-header">
+              <h2>Collector runtime</h2>
+              <span id="settingsSummary" class="status-pill">-</span>
+            </div>
+            <p class="section-note">Background collectors stage data for migration. Dashboard APIs stay on legacy routing until you greenlight.</p>
+            <div id="settingsMigrationBanner" class="settings-banner"></div>
+            <div id="collectorStatusCards" class="release-cards settings-collector-cards"></div>
+            <div id="settingsRoutingTable" class="settings-routing-table-wrap"></div>
+            <div id="settingsActions" class="admin-actions settings-actions"></div>
+            <div id="collectorActionStatus" class="admin-status"></div>
+          </section>
         </section>
-        <section class="overview-section">
-          <div class="section-header"><h2>Agent inventory</h2><span id="inventorySummary" class="status-pill">-</span></div>
-          <div class="table-wrap">
-            <table class="fleet-table">
-              <thead><tr><th><input id="selectAllHosts" type="checkbox" /></th><th>Host</th><th>Platform</th><th>Role</th><th>Current</th><th>Latest</th><th>Version</th><th>Update</th></tr></thead>
-              <tbody id="inventoryBody"></tbody>
-            </table>
-          </div>
+
+        <section id="adminPanelSettings" class="admin-panel hidden-panel" data-admin-panel="settings">
+          <section class="overview-section admin-settings-shell">
+            <div class="section-header">
+              <h2>Platform settings</h2>
+            </div>
+            <p class="section-note">Same options as <code>deploy/.env</code>, runtime overlay, and <code>scripts/hcc-settings</code>. Routing and integration changes hot-reload; collector runtime changes may need a Core restart.</p>
+            <div id="settingsGroups" class="settings-groups"></div>
+            <div class="admin-settings-footer">
+              <div class="admin-actions">
+                <button id="saveSettingsBtn" type="button" class="action-button">Save changed settings</button>
+                <button id="reloadSettingsBtn" type="button" class="action-button secondary">Reload</button>
+              </div>
+              <div id="settingsStatus" class="admin-status"></div>
+            </div>
+          </section>
         </section>
       </main>
       <footer class="page-footer"><span id="errorLabel"></span></footer>
     </div>
-    <script src="./common.js?v=24"></script>
-    <script src="./admin.js?v=12"></script>
+    <script src="./common.js?v=26"></script>
+    <script src="./admin.js?v=14"></script>
   </body>
 </html>

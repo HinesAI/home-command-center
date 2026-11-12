@@ -44,6 +44,13 @@ function doorStateClass(sensor) {
   return "ok";
 }
 
+function doorStatusLabel(sensor) {
+  if (sensor.status !== "online") return "Offline";
+  if (sensor.state === "Open") return "Open";
+  if (sensor.state === "Closed") return "Closed";
+  return sensor.state || "Unknown";
+}
+
 function weatherIconSvg(conditionClass) {
   const svg = (body) =>
     `<svg viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg">${body}</svg>`;
@@ -138,6 +145,7 @@ function paintDoorSensors(securityPayload, ids) {
   const summary = document.getElementById(ids.doorSummary);
   if (!container) return;
 
+  const strip = container.classList.contains("door-list--strip");
   const ha = haService(securityPayload);
   const sensors = [...((ha && ha.details && ha.details.sensors) || [])].sort((a, b) => {
     const rank = (s) => (s.state === "Open" ? 0 : s.status !== "online" ? 1 : 2);
@@ -163,19 +171,32 @@ function paintDoorSensors(securityPayload, ids) {
   const openCount = sensors.filter((sensor) => sensor.state === "Open").length;
   const onlineCount = sensors.filter((sensor) => sensor.status === "online").length;
   if (summary) {
-    summary.textContent = `${onlineCount}/${sensors.length} reporting${openCount ? ` · ${openCount} open` : ""}`;
+    summary.textContent = strip
+      ? `${sensors.length} door${sensors.length === 1 ? "" : "s"}${openCount ? ` · ${openCount} open` : ""}`
+      : `${onlineCount}/${sensors.length} reporting${openCount ? ` · ${openCount} open` : ""}`;
   }
 
   container.innerHTML = "";
   sensors.forEach((sensor) => {
     const row = document.createElement("article");
-    row.className = `door-row ${doorRowClass(sensor)}`.trim();
-    const label = sensor.state === "Open" ? "OPEN" : sensor.state;
-    row.innerHTML = `
-      <span class="door-state ${doorStateClass(sensor)}" aria-hidden="true"></span>
-      <div><h4>${sensor.name}</h4><p>${sensor.state} · ${sensor.status}</p></div>
-      <strong>${label}</strong>
-    `;
+    const tone = doorRowClass(sensor);
+    const label = doorStatusLabel(sensor);
+    if (strip) {
+      row.className = `door-chip ${tone}`.trim();
+      row.title = `${sensor.name}: ${label}`;
+      row.innerHTML = `
+        <span class="door-chip-dot ${doorStateClass(sensor)}" aria-hidden="true"></span>
+        <span class="door-chip-name">${sensor.name}</span>
+        <span class="door-chip-state">${label}</span>
+      `;
+    } else {
+      row.className = `door-row ${tone}`.trim();
+      row.innerHTML = `
+        <span class="door-state ${doorStateClass(sensor)}" aria-hidden="true"></span>
+        <div><h4>${sensor.name}</h4><p>${sensor.state} · ${sensor.status}</p></div>
+        <strong>${label === "Open" ? "OPEN" : label}</strong>
+      `;
+    }
     container.appendChild(row);
   });
 }

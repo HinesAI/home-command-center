@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>HCC | Security</title>
-    <link rel="stylesheet" href="./styles.css?v=23" />
+    <link rel="stylesheet" href="./styles.css?v=29" />
   </head>
   <body>
     <div class="app-shell">
@@ -19,7 +19,7 @@
       </header>
       <main class="dashboard page-grid">
         <section class="page-title">
-          <div><p class="eyebrow">Integrations</p><h1>Security</h1><p id="securityLabel">Frigate cameras, Home Assistant door sensors, and external platform links.</p></div>
+          <div><p class="eyebrow">Integrations</p><h1>Security</h1><p id="securityLabel">Frigate cameras, recording schedule, detections, and Home Assistant door sensors.</p></div>
           <div class="section-actions">
             <span id="securityPageStatus" class="status-pill">-</span>
             <span id="securityTimeLabel">Updated: -</span>
@@ -47,11 +47,45 @@
               <div id="overviewCameraPreviews" class="camera-grid"><p class="empty-state">Loading camera previews...</p></div>
             </div>
           </div>
+          <div class="frigate-ops" id="overviewFrigateOps">
+            <div class="recording-bar" id="overviewRecordingBar">
+              <div class="recording-bar-copy">
+                <h3>Recording schedule</h3>
+                <p id="overviewRecordingMeta">Checking HCC Bridge...</p>
+              </div>
+              <div class="recording-bar-actions">
+                <span id="overviewRecordingState" class="status-pill">-</span>
+                <button type="button" class="action-button" id="overviewRecordingOn" data-recording="on">Record on</button>
+                <button type="button" class="action-button warn" id="overviewRecordingOff" data-recording="off">Record off</button>
+              </div>
+            </div>
+            <div class="panel-heading" style="margin-top:18px;">
+              <h3>Latest detections</h3>
+              <span id="overviewDetectionMeta">Frigate alerts</span>
+            </div>
+            <div id="overviewDetections" class="detection-grid"><p class="empty-state">Loading detections...</p></div>
+          </div>
         </section>
 
         <section class="overview-section hidden-panel" id="frigatePanel">
           <div class="section-header"><h2>Frigate cameras</h2><a id="frigateOpenLink" class="section-link" href="#" target="_blank" rel="noopener">Open Frigate</a></div>
-          <div class="table-wrap"><table class="fleet-table"><thead><tr><th>Camera</th><th>Status</th><th>Camera FPS</th><th>Detection FPS</th><th>Detection</th></tr></thead><tbody id="frigateCameraTable"><tr><td colspan="5" class="empty-state">Loading...</td></tr></tbody></table></div>
+          <div class="recording-bar" id="frigateRecordingBar">
+            <div class="recording-bar-copy">
+              <h3>Recording</h3>
+              <p id="frigateRecordingMeta">Checking HCC Bridge...</p>
+            </div>
+            <div class="recording-bar-actions">
+              <span id="frigateRecordingState" class="status-pill">-</span>
+              <button type="button" class="action-button" id="frigateRecordingOn" data-recording="on">Record on</button>
+              <button type="button" class="action-button warn" id="frigateRecordingOff" data-recording="off">Record off</button>
+            </div>
+          </div>
+          <div class="table-wrap"><table class="fleet-table"><thead><tr><th>Camera</th><th>Status</th><th>Camera FPS</th><th>Detection FPS</th><th>Detection</th><th>Recording</th></tr></thead><tbody id="frigateCameraTable"><tr><td colspan="6" class="empty-state">Loading...</td></tr></tbody></table></div>
+          <div class="panel-heading" style="margin-top:18px;">
+            <h3>Latest detections</h3>
+            <span id="frigateDetectionMeta">Recent alerts</span>
+          </div>
+          <div id="frigateDetections" class="detection-grid"><p class="empty-state">Loading detections...</p></div>
         </section>
 
         <section class="overview-section hidden-panel" id="frigateEmbedPanel">
@@ -68,7 +102,7 @@
       </main>
       <footer class="page-footer"><span id="errorLabel"></span></footer>
     </div>
-    <script src="./common.js?v=23"></script>
-    <script src="./security.js?v=10"></script>
+    <script src="./common.js?v=26"></script>
+    <script src="./security.js?v=11"></script>
   </body>
 </html>

@@ -20,7 +20,7 @@ if not CORE_URL and CORE_BASE_URL:
 INTERVAL_SECONDS = float(os.environ.get("HCC_AGENT_INTERVAL_SECONDS", "120"))
 NODE_ID = os.environ.get("HCC_AGENT_NODE_ID", socket.gethostname())
 AGENT_ID = os.environ.get("HCC_AGENT_ID", f"agent-{NODE_ID}")
-AGENT_VERSION = os.environ.get("HCC_AGENT_VERSION", "1.0.5").strip() or "1.0.5"
+AGENT_VERSION = os.environ.get("HCC_AGENT_VERSION", "1.0.6").strip() or "1.0.6"
 INSTALL_DIR = os.environ.get("HCC_AGENT_INSTALL_DIR", "/opt/hcc-agent")
 ENV_PATH = os.environ.get("HCC_AGENT_ENV_PATH", "/etc/hcc-agent.env")
 STATE_DIR = os.environ.get("HCC_AGENT_STATE_DIR", "/var/lib/hcc-agent")

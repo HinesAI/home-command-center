@@ -167,8 +167,8 @@ function New-HccAgentWinSwXml {
     $xml = @"
 <service>
   <id>HCC-Agent</id>
-  <name>HCC Agent</name>
-  <description>HCC heartbeat and inventory agent</description>
+  <name>HCCv2 Agent</name>
+  <description>HCCv2 heartbeat and inventory agent</description>
   <executable>$powershell</executable>
   <arguments>$arguments</arguments>
   <workingdirectory>$InstallDir</workingdirectory>

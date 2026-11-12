@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# HCC Linux update helper — runs outside hcc-agent.service (via systemd oneshot or detached).
+# HCCv2 Linux update helper — runs outside hcc-agent.service (via systemd oneshot or detached).
 # Reads /var/lib/hcc-agent/update-manifest.json, stops the agent, installs staged files, restarts.
 set -euo pipefail
 
@@ -16,6 +16,7 @@ AGENT_FILES=(
   host_intelligence.py
   action_runner.py
   apply-update.sh
+  install-ca-trust.sh
   hcc-agent.service
   hcc-agent-update.service
 )
@@ -136,6 +137,19 @@ done
 
 set_env_version "$ENV_PATH" "$VERSION"
 log "set HCC_AGENT_VERSION=$VERSION"
+
+CA_CERT="${SOURCE_DIR}/certs/HCC-Local-CA.crt"
+if [[ -f "$CA_CERT" ]]; then
+  if [[ -x "${INSTALL_DIR}/install-ca-trust.sh" ]]; then
+    "${INSTALL_DIR}/install-ca-trust.sh" "$CA_CERT" "$INSTALL_DIR" || log "CA trust install warning"
+  elif [[ -x "${SOURCE_DIR}/install-ca-trust.sh" ]]; then
+    "${SOURCE_DIR}/install-ca-trust.sh" "$CA_CERT" "$INSTALL_DIR" || log "CA trust install warning"
+  else
+    install -d -m 755 "${INSTALL_DIR}/certs"
+    install -m 644 "$CA_CERT" "${INSTALL_DIR}/certs/HCC-Local-CA.crt"
+  fi
+  log "installed HCC Local CA trust"
+fi
 
 systemctl daemon-reload
 log "starting $AGENT_SERVICE"

@@ -38,7 +38,7 @@ RSYNC_EXCLUDES=(
   --exclude 'deploy/Caddyfile'
   --exclude 'deploy/DNS-hcc.example.local.md'
   --exclude 'deploy/hcc.env.internal.example'
-  --exclude 'docs/INTERNAL-SITE.md'
+  --exclude 'docs/INTERNAL-HINES.md'
   --exclude '**/__pycache__/'
   --exclude '**/*.pyc'
   --exclude 'apps/core/data/'
@@ -59,10 +59,13 @@ SHARED_PATHS=(
   deploy/hcc.env.prod.example
   deploy/install-hcc.sh
   deploy/PACKAGE-README.md
+  deploy/collectors.example.json
+  deploy/collector-migration.env.example
   docs/ARCHITECTURE.md
   docs/AGENT-IDENTITY.md
   docs/DASHBOARD-FRONTEND-BRIEF.md
   docs/REPOSITORIES.md
+  docs/COLLECTORS.md
   VERSION
   CHANGELOG.md
   README.md
@@ -86,6 +89,45 @@ for rel_path in "${SHARED_PATHS[@]}"; do
   rsync -a --delete "${RSYNC_EXCLUDES[@]}" "$src" "$dest_parent/"
   echo "synced: $rel_path"
 done
+
+apply_public_branding() {
+  local target="$1"
+  local files=(
+    apps/core/branding.py
+    apps/web/common.js
+    apps/web/admin.js
+    apps/terminal/bin/hcc-terminal
+    apps/terminal/bin/hcc-send-daily-report
+    apps/terminal/bin/hcc-terminal-start
+    apps/terminal/bin/hcc-collect-status
+    apps/terminal/README.md
+    deploy/PACKAGE-README.md
+    docs/DASHBOARD-FRONTEND-BRIEF.md
+    README.md
+    CHANGELOG.md
+  )
+
+  echo
+  echo "Applying public Home Command Center branding in target repo..."
+  for rel_path in "${files[@]}"; do
+    local file="$target/$rel_path"
+    [[ -f "$file" ]] || continue
+    sed -i \
+      -e 's/Home Command Center/Home Command Center/g' \
+      -e 's/DEFAULT_PRODUCT_NAME = "Home Command Center"/DEFAULT_PRODUCT_NAME = "Home Command Center"/' \
+      -e 's/const DEFAULT_PRODUCT_NAME = "Home Command Center"/const DEFAULT_PRODUCT_NAME = "Home Command Center"/' \
+      -e 's/HCC_PRODUCT_NAME:-Home Command Center/HCC_PRODUCT_NAME:-Home Command Center/' \
+      "$file"
+    echo "branded: $rel_path"
+  done
+
+  while IFS= read -r html_file; do
+    sed -i 's/Home Command Center/Home Command Center/g' "$html_file"
+    echo "branded: ${html_file#"$target"/}"
+  done < <(find "$target/apps/web" -maxdepth 1 -name '*.html' -type f)
+}
+
+apply_public_branding "$TARGET"
 
 cat <<EOF
 

@@ -2,7 +2,7 @@
   "webBaseUrl": "http://hcc.example.local/downloads",
   "platforms": {
     "windows": {
-      "latest": "1.0.9",
+      "latest": "1.0.10",
       "versions": {
         "1.0.0": {
           "label": "Initial gMSA rollout",
@@ -53,11 +53,16 @@
           "label": "Detached apply-update helper (stop/install/start)",
           "packageUrl": "http://hcc.example.local/downloads/hcc-agent-windows.zip",
           "sha256": "9a650b31b0edd4b2e0685b963f8f90ffad24fc34207ef53b53ea86246939677c"
+        },
+        "1.0.10": {
+          "label": "Install HCC Local CA into system trust on install/update",
+          "packageUrl": "http://hcc.example.local/downloads/hcc-agent-windows.zip",
+          "sha256": "48cfb83b44a6a5cd367d306b1267c9de02bf69253e1532a31ee5b308bd22e069"
         }
       }
     },
     "linux": {
-      "latest": "1.0.5",
+      "latest": "1.0.6",
       "versions": {
         "1.0.0": {
           "label": "Baseline Linux agent",
@@ -88,6 +93,11 @@
           "label": "Detached apply-update helper (stop/install/start)",
           "packageUrl": "http://hcc.example.local/downloads/hcc-agent-linux.tar.gz",
           "sha256": "79cba429b535eb317888dcceca69ab070f9fca94bf3035188edace9ed8c3a59c"
+        },
+        "1.0.6": {
+          "label": "Install HCC Local CA into system trust on install/update",
+          "packageUrl": "http://hcc.example.local/downloads/hcc-agent-linux.tar.gz",
+          "sha256": "f331610874afec230b83382c8c3bc602811a12e8610a987a477f33b793df8da7"
         }
       }
     }

@@ -1,0 +1,45 @@
+{
+  "tickSeconds": 5,
+  "collectors": [
+    {
+      "id": "fleet-agents",
+      "type": "agent",
+      "intervalSeconds": 30,
+      "enabled": true
+    },
+    {
+      "id": "homeassistant",
+      "type": "homeassistant",
+      "intervalSeconds": 60,
+      "enabled": true
+    },
+    {
+      "id": "weather",
+      "type": "service",
+      "service": "weather",
+      "intervalSeconds": 900,
+      "enabled": true
+    },
+    {
+      "id": "network",
+      "type": "service",
+      "service": "network",
+      "intervalSeconds": 60,
+      "enabled": true
+    },
+    {
+      "id": "security",
+      "type": "service",
+      "service": "security",
+      "intervalSeconds": 60,
+      "enabled": true
+    },
+    {
+      "id": "climate",
+      "type": "service",
+      "service": "climate",
+      "intervalSeconds": 30,
+      "enabled": true
+    }
+  ]
+}

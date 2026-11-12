@@ -19,7 +19,8 @@ $AgentFiles = @(
     "diagnose-server-core.ps1",
     "register-hcc-agent-service.ps1",
     "fix-hcc-agent.ps1",
-    "apply-update.ps1"
+    "apply-update.ps1",
+    "install-ca-trust.ps1"
 )
 
 function Write-UpdateLog {
@@ -116,6 +117,22 @@ try {
             Copy-Item -Path $src -Destination (Join-Path $InstallDir $file) -Force
             Write-UpdateLog "installed $file"
         }
+    }
+
+    $caCert = Join-Path $sourceDir "certs\HCC-Local-CA.crt"
+    $caTrust = Join-Path $InstallDir "install-ca-trust.ps1"
+    if (-not (Test-Path $caTrust)) {
+        $caTrust = Join-Path $sourceDir "install-ca-trust.ps1"
+    }
+    if (Test-Path $caCert) {
+        if (Test-Path $caTrust) {
+            & $caTrust -CertPath $caCert -InstallDir $InstallDir
+        } else {
+            $destDir = Join-Path $InstallDir "certs"
+            New-Item -ItemType Directory -Force -Path $destDir | Out-Null
+            Copy-Item -Path $caCert -Destination (Join-Path $destDir "HCC-Local-CA.crt") -Force
+        }
+        Write-UpdateLog "installed HCC Local CA trust"
     }
 
     Set-EnvFileVersion -Path $EnvPath -Version $version

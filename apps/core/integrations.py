@@ -4,6 +4,7 @@ import ssl
 import time
 import http.client
 import urllib.error
+import urllib.parse
 import urllib.request
 
 
@@ -26,9 +27,19 @@ HA_CLIMATE_ENTITIES = [
     if value.strip()
 ]
 CLIMATE_REFRESH_SECONDS = int(os.environ.get("HCC_CLIMATE_REFRESH_SECONDS", "30"))
-FRIGATE_URL = os.environ.get("HCC_FRIGATE_URL", "http://192.168.1.30:5000").rstrip("/")
+FRIGATE_URL = os.environ.get("HCC_FRIGATE_URL", "https://192.168.1.30:8971").rstrip("/")
+FRIGATE_BRIDGE_URL = os.environ.get("HCC_FRIGATE_BRIDGE_URL", "").rstrip("/")
+FRIGATE_USER = os.environ.get("HCC_FRIGATE_USER", "").strip()
+FRIGATE_PASSWORD = os.environ.get("HCC_FRIGATE_PASSWORD", "").strip()
+FRIGATE_VERIFY_SSL = os.environ.get("HCC_FRIGATE_VERIFY_SSL", "false").lower() in ("1", "true", "yes")
 INTEGRATION_TIMEOUT = float(os.environ.get("HCC_INTEGRATION_TIMEOUT", "5"))
 FRIGATE_CAMERA_PATH_PREFIX = "/api/v1/integrations/frigate/camera/"
+FRIGATE_EVENT_PATH_PREFIX = "/api/v1/integrations/frigate/events/"
+FRIGATE_EVENT_MEDIA = {
+    "thumbnail.jpg": "image/jpeg",
+    "snapshot.jpg": "image/jpeg",
+    "clip.mp4": "video/mp4",
+}
 
 WEATHER_LAT = float(os.environ.get("HCC_WEATHER_LAT", "33.9090855"))
 WEATHER_LON = float(os.environ.get("HCC_WEATHER_LON", "-87.3901102"))
@@ -46,6 +57,52 @@ NETWORK_CACHE_SECONDS = int(os.environ.get("HCC_NETWORK_CACHE_SECONDS", "60"))
 _weather_cache = {"fetched_at": 0.0, "payload": None}
 _network_cache = {"fetched_at": 0.0, "payload": None}
 _unifi_ssl_context = None
+_frigate_ssl = None
+_frigate_token = {"value": "", "expires": 0.0}
+
+
+def reload_configuration():
+    """Re-read integration settings from the process environment."""
+    global HA_URL, HA_TOKEN, HA_DOOR_DEVICE_CLASSES, HA_CLIMATE_ENTITIES
+    global CLIMATE_REFRESH_SECONDS, FRIGATE_URL, FRIGATE_BRIDGE_URL, INTEGRATION_TIMEOUT
+    global FRIGATE_USER, FRIGATE_PASSWORD, FRIGATE_VERIFY_SSL
+    global WEATHER_LAT, WEATHER_LON, WEATHER_LABEL, WEATHER_TIMEZONE, WEATHER_CACHE_SECONDS
+    global UNIFI_URL, UNIFI_API_KEY, UNIFI_SITE, UNIFI_VERIFY_SSL, NETWORK_CACHE_SECONDS
+    global _unifi_ssl_context, _frigate_ssl, _frigate_token
+
+    HA_URL = os.environ.get("HCC_HA_URL", "http://192.168.1.20:8123").rstrip("/")
+    HA_TOKEN = os.environ.get("HCC_HA_TOKEN", "").strip()
+    HA_DOOR_DEVICE_CLASSES = {
+        value.strip().lower()
+        for value in os.environ.get("HCC_HA_DOOR_DEVICE_CLASSES", "door,opening,garage_door").split(",")
+        if value.strip()
+    }
+    HA_CLIMATE_ENTITIES = [
+        value.strip()
+        for value in os.environ.get("HCC_HA_CLIMATE_ENTITIES", "").split(",")
+        if value.strip()
+    ]
+    CLIMATE_REFRESH_SECONDS = int(os.environ.get("HCC_CLIMATE_REFRESH_SECONDS", "30"))
+    FRIGATE_URL = os.environ.get("HCC_FRIGATE_URL", "https://192.168.1.30:8971").rstrip("/")
+    FRIGATE_BRIDGE_URL = os.environ.get("HCC_FRIGATE_BRIDGE_URL", "").rstrip("/")
+    FRIGATE_USER = os.environ.get("HCC_FRIGATE_USER", "").strip()
+    FRIGATE_PASSWORD = os.environ.get("HCC_FRIGATE_PASSWORD", "").strip()
+    FRIGATE_VERIFY_SSL = os.environ.get("HCC_FRIGATE_VERIFY_SSL", "false").lower() in ("1", "true", "yes")
+    INTEGRATION_TIMEOUT = float(os.environ.get("HCC_INTEGRATION_TIMEOUT", "5"))
+    WEATHER_LAT = float(os.environ.get("HCC_WEATHER_LAT", "33.9090855"))
+    WEATHER_LON = float(os.environ.get("HCC_WEATHER_LON", "-87.3901102"))
+    WEATHER_LABEL = os.environ.get("HCC_WEATHER_LABEL", "919 Old Zion Rd · Nauvoo, AL").strip() or "919 Old Zion Rd · Nauvoo, AL"
+    WEATHER_TIMEZONE = os.environ.get("HCC_WEATHER_TIMEZONE", "America/Chicago").strip() or "America/Chicago"
+    WEATHER_CACHE_SECONDS = int(os.environ.get("HCC_WEATHER_CACHE_SECONDS", "900"))
+    UNIFI_URL = os.environ.get("HCC_UNIFI_URL", "https://192.168.1.1").rstrip("/")
+    UNIFI_API_KEY = os.environ.get("HCC_UNIFI_API_KEY", "").strip()
+    UNIFI_SITE = os.environ.get("HCC_UNIFI_SITE", "default").strip() or "default"
+    UNIFI_VERIFY_SSL = os.environ.get("HCC_UNIFI_VERIFY_SSL", "false").lower() in ("1", "true", "yes")
+    NETWORK_CACHE_SECONDS = int(os.environ.get("HCC_NETWORK_CACHE_SECONDS", "60"))
+    _unifi_ssl_context = None
+    _frigate_ssl = None
+    _frigate_token = {"value": "", "expires": 0.0}
+
 
 GATEWAY_DEVICE_TYPES = {"udm", "ugw", "uxg", "uos", "ugw3", "ugw4", "ugwHD", "ugwXG"}
 
@@ -81,19 +138,19 @@ WEATHER_CODE_META = {
 }
 
 
-def _fetch_text(url, timeout=INTEGRATION_TIMEOUT, headers=None):
+def _fetch_text(url, timeout=INTEGRATION_TIMEOUT, headers=None, context=None):
     started = time.time()
     request = urllib.request.Request(url, headers={"Accept": "*/*", **(headers or {})})
-    with urllib.request.urlopen(request, timeout=timeout) as response:
+    with urllib.request.urlopen(request, timeout=timeout, context=context) as response:
         body = response.read().decode("utf-8", errors="replace").strip()
         latency_ms = round((time.time() - started) * 1000, 1)
         return body, latency_ms, response.status
 
 
-def _fetch_json(url, timeout=INTEGRATION_TIMEOUT, headers=None):
+def _fetch_json(url, timeout=INTEGRATION_TIMEOUT, headers=None, context=None):
     started = time.time()
     request = urllib.request.Request(url, headers={"Accept": "application/json", **(headers or {})})
-    with urllib.request.urlopen(request, timeout=timeout) as response:
+    with urllib.request.urlopen(request, timeout=timeout, context=context) as response:
         body = response.read().decode("utf-8", errors="replace")
         latency_ms = round((time.time() - started) * 1000, 1)
         return json.loads(body) if body else {}, latency_ms, response.status
@@ -285,10 +342,10 @@ def network_integrations(refresh_seconds=None):
         return base
 
 
-def _probe_url(url, timeout=INTEGRATION_TIMEOUT, headers=None):
+def _probe_url(url, timeout=INTEGRATION_TIMEOUT, headers=None, context=None):
     started = time.time()
     request = urllib.request.Request(url, method="GET", headers=headers or {})
-    with urllib.request.urlopen(request, timeout=timeout) as response:
+    with urllib.request.urlopen(request, timeout=timeout, context=context) as response:
         latency_ms = round((time.time() - started) * 1000, 1)
         return True, latency_ms, response.status, ""
 
@@ -648,6 +705,72 @@ def _fetch_home_assistant_sensors():
         }
 
 
+def home_assistant_entity_scan():
+    """Normalized Home Assistant entity scan for the collector runtime."""
+    if not HA_TOKEN:
+        return {
+            "configured": False,
+            "online": False,
+            "entityCount": 0,
+            "domains": {},
+            "entities": [],
+            "error": "Home Assistant token not configured",
+        }
+
+    try:
+        states, _latency, status_code = _fetch_json(f"{HA_URL}/api/states", headers=_ha_headers())
+        config_payload, _cfg_latency, _cfg_status = _fetch_json(f"{HA_URL}/api/config", headers=_ha_headers())
+    except Exception as exc:
+        return {
+            "configured": True,
+            "online": False,
+            "entityCount": 0,
+            "domains": {},
+            "entities": [],
+            "error": str(exc),
+        }
+
+    entities = []
+    domains = {}
+    if isinstance(states, list):
+        for entry in states:
+            if not isinstance(entry, dict):
+                continue
+            entity_id = str(entry.get("entity_id") or "").strip()
+            if not entity_id or "." not in entity_id:
+                continue
+            domain = entity_id.split(".", 1)[0]
+            domains[domain] = domains.get(domain, 0) + 1
+            attrs = entry.get("attributes") if isinstance(entry.get("attributes"), dict) else {}
+            entities.append(
+                {
+                    "entityId": entity_id,
+                    "domain": domain,
+                    "state": str(entry.get("state") if entry.get("state") is not None else "unknown"),
+                    "name": str(attrs.get("friendly_name") or entity_id),
+                    "deviceClass": str(attrs.get("device_class") or ""),
+                    "unitOfMeasurement": attrs.get("unit_of_measurement"),
+                    "lastChanged": str(entry.get("last_changed") or ""),
+                    "lastUpdated": str(entry.get("last_updated") or ""),
+                }
+            )
+
+    entities.sort(key=lambda row: row["entityId"])
+    version = None
+    if isinstance(config_payload, dict):
+        version = config_payload.get("version")
+
+    return {
+        "configured": True,
+        "online": status_code < 500,
+        "version": version,
+        "entityCount": len(entities),
+        "domains": dict(sorted(domains.items())),
+        "entities": entities,
+        "error": None,
+    }
+
+
 def _probe_home_assistant():
     item = {
         "id": "home-assistant",
@@ -703,8 +826,94 @@ def _probe_home_assistant():
     return item
 
 
+def _frigate_ssl_context():
+    global _frigate_ssl
+    if _frigate_ssl is None:
+        _frigate_ssl = ssl.create_default_context()
+        if not FRIGATE_VERIFY_SSL:
+            _frigate_ssl.check_hostname = False
+            _frigate_ssl.verify_mode = ssl.CERT_NONE
+    return _frigate_ssl
+
+
+def _frigate_login():
+    if not FRIGATE_USER or not FRIGATE_PASSWORD:
+        return ""
+    payload = json.dumps({"user": FRIGATE_USER, "password": FRIGATE_PASSWORD}).encode("utf-8")
+    request = urllib.request.Request(
+        f"{FRIGATE_URL}/api/login",
+        data=payload,
+        headers={"Content-Type": "application/json", "Accept": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=INTEGRATION_TIMEOUT, context=_frigate_ssl_context()) as response:
+        cookie = response.headers.get("Set-Cookie") or ""
+    token = ""
+    for part in cookie.split(";"):
+        part = part.strip()
+        if part.startswith("frigate_token="):
+            token = part.split("=", 1)[1]
+            break
+    if not token:
+        raise RuntimeError("Frigate login succeeded without a session token")
+    _frigate_token["value"] = token
+    _frigate_token["expires"] = time.time() + 12 * 3600
+    return token
+
+
+def _frigate_auth_headers(force=False):
+    if not FRIGATE_USER or not FRIGATE_PASSWORD:
+        return {}
+    now = time.time()
+    token = _frigate_token.get("value") or ""
+    if force or not token or _frigate_token.get("expires", 0) <= now + 60:
+        token = _frigate_login()
+    if not token:
+        return {}
+    return {"Authorization": f"Bearer {token}"}
+
+
+def _frigate_call(url, timeout=None, accept="application/json"):
+    timeout = INTEGRATION_TIMEOUT if timeout is None else timeout
+    last_error = None
+    for attempt in (1, 2):
+        headers = {"Accept": accept, **_frigate_auth_headers(force=attempt > 1)}
+        request = urllib.request.Request(url, headers=headers)
+        try:
+            return urllib.request.urlopen(request, timeout=timeout, context=_frigate_ssl_context())
+        except urllib.error.HTTPError as exc:
+            last_error = exc
+            if exc.code == 401 and attempt == 1 and FRIGATE_USER and FRIGATE_PASSWORD:
+                _frigate_token["value"] = ""
+                continue
+            if exc.code == 401:
+                raise RuntimeError("Frigate authentication required (set HCC_FRIGATE_USER and HCC_FRIGATE_PASSWORD)") from exc
+            raise
+    raise last_error
+
+
+def _fetch_frigate_text(url, timeout=None):
+    started = time.time()
+    with _frigate_call(url, timeout=timeout, accept="*/*") as response:
+        body = response.read().decode("utf-8", errors="replace").strip()
+        latency_ms = round((time.time() - started) * 1000, 1)
+        return body, latency_ms, response.status
+
+
+def _fetch_frigate_json(url, timeout=None):
+    started = time.time()
+    with _frigate_call(url, timeout=timeout, accept="application/json") as response:
+        body = response.read().decode("utf-8", errors="replace")
+        latency_ms = round((time.time() - started) * 1000, 1)
+        return json.loads(body) if body else {}, latency_ms, response.status
+
+
 def frigate_camera_preview_path(camera_name):
     return f"{FRIGATE_CAMERA_PATH_PREFIX}{camera_name}/latest.jpg"
+
+
+def frigate_event_media_path(event_id, kind):
+    return f"{FRIGATE_EVENT_PATH_PREFIX}{event_id}/{kind}"
 
 
 def fetch_frigate_camera_latest(camera_name):
@@ -712,13 +921,170 @@ def fetch_frigate_camera_latest(camera_name):
     if not safe_name or "/" in safe_name or ".." in safe_name:
         raise ValueError("invalid camera name")
     url = f"{FRIGATE_URL}/api/{safe_name}/latest.jpg"
-    request = urllib.request.Request(url, headers={"Accept": "image/jpeg"})
-    with urllib.request.urlopen(request, timeout=INTEGRATION_TIMEOUT) as response:
+    with _frigate_call(url, accept="image/jpeg") as response:
         body = response.read()
         content_type = response.headers.get("Content-Type", "image/jpeg")
     if not body:
         raise RuntimeError("empty camera image")
     return body, content_type
+
+
+def fetch_frigate_event_media(event_id, kind):
+    safe_id = str(event_id or "").strip()
+    safe_kind = str(kind or "").strip().lower()
+    if not safe_id or "/" in safe_id or ".." in safe_id:
+        raise ValueError("invalid event id")
+    if safe_kind not in FRIGATE_EVENT_MEDIA:
+        raise ValueError("invalid media kind")
+    url = f"{FRIGATE_URL}/api/events/{safe_id}/{safe_kind}"
+    timeout = 20 if safe_kind.endswith(".mp4") else INTEGRATION_TIMEOUT
+    with _frigate_call(url, timeout=timeout, accept=FRIGATE_EVENT_MEDIA[safe_kind]) as response:
+        body = response.read()
+        content_type = response.headers.get("Content-Type", FRIGATE_EVENT_MEDIA[safe_kind])
+    if not body:
+        raise RuntimeError("empty event media")
+    return body, content_type
+
+
+def _rewrite_event_media(item):
+    event_id = str(item.get("event_id") or item.get("id") or "").strip()
+    if not event_id:
+        return item
+    rewritten = dict(item)
+    rewritten["thumbnailUrl"] = frigate_event_media_path(event_id, "thumbnail.jpg")
+    rewritten["snapshotUrl"] = frigate_event_media_path(event_id, "snapshot.jpg")
+    rewritten["clipUrl"] = frigate_event_media_path(event_id, "clip.mp4")
+    return rewritten
+
+
+def _fetch_frigate_bridge_status():
+    if not FRIGATE_BRIDGE_URL:
+        return {"online": False, "error": "HCC Frigate bridge URL not configured"}
+    try:
+        data, latency_ms, status = _fetch_json(f"{FRIGATE_BRIDGE_URL}/api/v1/status")
+        if not isinstance(data, dict):
+            raise RuntimeError("bridge status was not an object")
+        cameras = data.get("cameras") if isinstance(data.get("cameras"), dict) else {}
+        schedule = data.get("schedule") if isinstance(data.get("schedule"), dict) else {}
+        return {
+            "online": True,
+            "url": FRIGATE_BRIDGE_URL,
+            "latencyMs": latency_ms,
+            "statusCode": status,
+            "updatedAt": data.get("updated_at"),
+            "allRecording": bool(data.get("all_recording")),
+            "schedule": {
+                "window": schedule.get("window"),
+                "timezone": schedule.get("timezone"),
+                "active": bool(schedule.get("scheduled_recording_active")),
+            },
+            "cameras": {
+                name: {
+                    "recording": bool((state or {}).get("recording")),
+                    "detect": bool((state or {}).get("detect")),
+                    "lpr": bool((state or {}).get("lpr")),
+                }
+                for name, state in cameras.items()
+                if isinstance(state, dict)
+            },
+            "error": None,
+        }
+    except Exception as exc:
+        return {
+            "online": False,
+            "url": FRIGATE_BRIDGE_URL,
+            "allRecording": False,
+            "schedule": {},
+            "cameras": {},
+            "error": str(exc),
+        }
+
+
+def _detections_from_review(reviews, limit):
+    detections = []
+    if not isinstance(reviews, list):
+        return detections
+    for review in reviews[:limit]:
+        if not isinstance(review, dict):
+            continue
+        data = review.get("data") if isinstance(review.get("data"), dict) else {}
+        event_ids = data.get("detections") if isinstance(data.get("detections"), list) else []
+        event_id = str(event_ids[0]) if event_ids else ""
+        review_id = str(review.get("id") or "")
+        item = {
+            "id": review_id,
+            "camera": review.get("camera"),
+            "severity": review.get("severity"),
+            "objects": data.get("objects") or [],
+            "sub_labels": data.get("sub_labels") or [],
+            "start_time": review.get("start_time"),
+            "end_time": review.get("end_time"),
+            "review_url": f"{FRIGATE_URL}/review?id={urllib.parse.quote(review_id)}" if review_id else FRIGATE_URL,
+        }
+        if event_id:
+            item["event_id"] = event_id
+        detections.append(_rewrite_event_media(item) if event_id else item)
+    return detections
+
+
+def _fetch_frigate_latest_detections(limit=12):
+    if FRIGATE_BRIDGE_URL:
+        try:
+            data, _latency, _status = _fetch_json(f"{FRIGATE_BRIDGE_URL}/api/v1/latest?limit={int(limit)}")
+            items = data.get("items") if isinstance(data, dict) else data
+            if isinstance(items, list):
+                return [_rewrite_event_media(item) for item in items[:limit] if isinstance(item, dict)]
+        except Exception:
+            pass
+    try:
+        reviews, _latency, _status = _fetch_frigate_json(f"{FRIGATE_URL}/api/review?limit={int(limit)}")
+        return _detections_from_review(reviews, limit)
+    except Exception:
+        return []
+
+
+def set_frigate_recording(camera="all", enabled=True):
+    if not FRIGATE_BRIDGE_URL:
+        raise RuntimeError("HCC Frigate bridge URL not configured")
+    camera_name = str(camera or "all").strip() or "all"
+    payload = json.dumps({"camera": camera_name, "enabled": bool(enabled)}).encode("utf-8")
+    request = urllib.request.Request(
+        f"{FRIGATE_BRIDGE_URL}/api/v1/recording",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=INTEGRATION_TIMEOUT) as response:
+        body = response.read()
+    try:
+        result = json.loads(body.decode("utf-8")) if body else {}
+    except json.JSONDecodeError:
+        result = {"ok": True}
+    snapshot = security_integrations(refresh_seconds=60)
+    snapshot["recordingResult"] = result if isinstance(result, dict) else {"ok": True}
+    return snapshot
+
+
+def toggle_frigate_recording(camera="all"):
+    if not FRIGATE_BRIDGE_URL:
+        raise RuntimeError("HCC Frigate bridge URL not configured")
+    camera_name = str(camera or "all").strip() or "all"
+    payload = json.dumps({"camera": camera_name}).encode("utf-8")
+    request = urllib.request.Request(
+        f"{FRIGATE_BRIDGE_URL}/api/v1/recording/toggle",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=INTEGRATION_TIMEOUT) as response:
+        body = response.read()
+    try:
+        result = json.loads(body.decode("utf-8")) if body else {}
+    except json.JSONDecodeError:
+        result = {"ok": True}
+    snapshot = security_integrations(refresh_seconds=60)
+    snapshot["recordingResult"] = result if isinstance(result, dict) else {"ok": True}
+    return snapshot
 
 
 def _probe_frigate():
@@ -737,40 +1103,61 @@ def _probe_frigate():
             "version": None,
             "cameraCount": 0,
             "detectionEnabledCount": 0,
+            "recordingEnabledCount": 0,
+            "allRecording": False,
+            "bridge": {"online": False},
+            "schedule": {},
+            "latestDetections": [],
             "cameras": [],
         },
     }
     try:
-        _online, latency_ms, status_code, _message = _probe_url(FRIGATE_URL)
+        _online, latency_ms, status_code, _message = _probe_url(
+            FRIGATE_URL, headers=_frigate_auth_headers(), context=_frigate_ssl_context()
+        )
         item["latencyMs"] = latency_ms
         item["statusCode"] = status_code
         item["online"] = status_code < 500
+    except urllib.error.HTTPError as exc:
+        if exc.code == 401:
+            item["error"] = "Frigate authentication required (set HCC_FRIGATE_USER and HCC_FRIGATE_PASSWORD)"
+        else:
+            item["error"] = str(exc)
+        item["statusCode"] = exc.code
+        return item
     except Exception as exc:
         item["error"] = str(exc)
         return item
 
     try:
-        version_text, _latency, _status = _fetch_text(f"{FRIGATE_URL}/api/version")
+        version_text, _latency, _status = _fetch_frigate_text(f"{FRIGATE_URL}/api/version")
         if version_text:
             item["details"]["version"] = version_text
     except Exception:
         pass
 
     try:
-        stats, _latency, _status = _fetch_json(f"{FRIGATE_URL}/api/stats")
+        stats, _latency, _status = _fetch_frigate_json(f"{FRIGATE_URL}/api/stats")
         cameras = []
+        bridge = _fetch_frigate_bridge_status()
+        bridge_cameras = bridge.get("cameras") if isinstance(bridge.get("cameras"), dict) else {}
         if isinstance(stats, dict):
             for name, camera in stats.get("cameras", {}).items():
                 if not isinstance(camera, dict):
                     continue
                 camera_fps = camera.get("camera_fps") or 0
+                bridge_cam = bridge_cameras.get(name) or {}
+                recording = bool(bridge_cam.get("recording")) if bridge_cam else bool(camera.get("record_enabled", camera.get("recording")))
+                detection_enabled = bool(bridge_cam.get("detect")) if bridge_cam else bool(camera.get("detection_enabled"))
                 cameras.append(
                     {
                         "name": name,
                         "online": float(camera_fps) > 0,
                         "cameraFps": camera.get("camera_fps"),
                         "detectionFps": camera.get("detection_fps"),
-                        "detectionEnabled": bool(camera.get("detection_enabled")),
+                        "detectionEnabled": detection_enabled,
+                        "recording": recording,
+                        "lpr": bool(bridge_cam.get("lpr")) if bridge_cam else False,
                         "previewUrl": frigate_camera_preview_path(name),
                         "latestImageUrl": f"{FRIGATE_URL}/api/{name}/latest.jpg",
                         "livePageUrl": f"{FRIGATE_URL}/live/{name}",
@@ -781,6 +1168,16 @@ def _probe_frigate():
         item["details"]["cameraCount"] = len(cameras)
         item["details"]["onlineCameraCount"] = sum(1 for row in cameras if row["online"])
         item["details"]["detectionEnabledCount"] = sum(1 for row in cameras if row["detectionEnabled"])
+        item["details"]["recordingEnabledCount"] = sum(1 for row in cameras if row["recording"])
+        item["details"]["allRecording"] = bool(bridge.get("allRecording"))
+        item["details"]["bridge"] = {
+            "online": bool(bridge.get("online")),
+            "url": bridge.get("url") or FRIGATE_BRIDGE_URL,
+            "error": bridge.get("error"),
+            "updatedAt": bridge.get("updatedAt"),
+        }
+        item["details"]["schedule"] = bridge.get("schedule") or {}
+        item["details"]["latestDetections"] = _fetch_frigate_latest_detections(12)
         item["online"] = True
     except Exception as exc:
         item["error"] = str(exc)

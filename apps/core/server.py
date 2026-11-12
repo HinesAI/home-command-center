@@ -12,7 +12,13 @@ from urllib.parse import parse_qs, urlparse
 
 import auth
 import branding
+import caldav_client
+import collectors
+from collectors import migration as collector_migration
+from collectors import routing as integration_routing
+import family_board
 import integrations
+import settings as hcc_settings
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("hcc.core")
@@ -37,6 +43,19 @@ _agent_nodes = {}
 _agent_nodes_lock = threading.Lock()
 _action_queue = {}
 _action_log = []
+_collector_runtime = None
+
+
+def fleet_snapshot_for_collectors():
+    with _agent_nodes_lock:
+        return json.loads(json.dumps(_agent_nodes))
+
+
+def collector_runtime():
+    global _collector_runtime
+    if _collector_runtime is None:
+        _collector_runtime = collectors.get_runtime(fleet_snapshot_for_collectors, HEARTBEAT_TTL_SECONDS)
+    return _collector_runtime
 
 
 def load_fleet_state():
@@ -946,6 +965,20 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(raw)
 
+    def _send_bytes(self, code, body, content_type, extra_headers=None):
+        raw = body if isinstance(body, (bytes, bytearray)) else str(body).encode("utf-8")
+        self.send_response(code)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(raw)))
+        self.send_header("Access-Control-Allow-Origin", self._cors_origin())
+        self.send_header("Access-Control-Allow-Credentials", "true")
+        self.send_header("Vary", "Origin")
+        if extra_headers:
+            for key, value in extra_headers.items():
+                self.send_header(key, value)
+        self.end_headers()
+        self.wfile.write(raw)
+
     def _fleet_nodes(self):
         now = time.time()
         with _agent_nodes_lock:
@@ -1351,6 +1384,17 @@ class Handler(BaseHTTPRequestHandler):
                 },
             )
             return
+        if path == "/api/v1/admin/settings":
+            runtime = collector_runtime()
+            collectors_index = runtime.index() if runtime is not None else None
+            self._send_json(
+                200,
+                hcc_settings.admin_settings_payload(
+                    collectors_index,
+                    collector_migration.migration_status(),
+                ),
+            )
+            return
         if path == "/api/v1/fleet/node/capabilities":
             node_id = qs.get("nodeId", [""])[0]
             if not node_id:
@@ -1363,19 +1407,73 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(200, {"nodeId": node_id, "actions": actions})
             return
         if path == "/api/v1/integrations/security":
-            self._send_json(200, integrations.security_integrations(refresh_seconds=60))
+            self._send_json(200, integration_routing.security_integrations(refresh_seconds=60))
             return
         if path == "/api/v1/integrations/weather":
-            self._send_json(200, integrations.weather_forecast())
+            self._send_json(200, integration_routing.weather_forecast())
             return
         if path == "/api/v1/integrations/climate":
-            self._send_json(200, integrations.climate_integrations())
+            self._send_json(200, integration_routing.climate_integrations())
+            return
+        if path == "/api/v1/integrations/family":
+            self._send_json(200, family_board.snapshot(refresh_seconds=30))
+            return
+        if path == "/api/v1/integrations/family/calendar.ics":
+            ics = family_board.render_ics()
+            self._send_bytes(
+                200,
+                ics,
+                "text/calendar; charset=utf-8",
+                extra_headers={"Content-Disposition": 'inline; filename="hcc-family.ics"'},
+            )
             return
         if path == "/api/v1/integrations/network":
-            self._send_json(200, integrations.network_integrations(refresh_seconds=60))
+            self._send_json(200, integration_routing.network_integrations(refresh_seconds=60))
             return
         if path == "/api/v1/system/version":
             self._send_json(200, branding.product_info(hcc_version()))
+            return
+        if path == "/api/v1/collectors":
+            runtime = collector_runtime()
+            if runtime is None:
+                self._send_json(
+                    200,
+                    {
+                        "enabled": False,
+                        "generatedAt": now_iso_utc(),
+                        "collectorCount": 0,
+                        "activeCount": 0,
+                        "collectors": [],
+                    },
+                )
+                return
+            self._send_json(200, runtime.index())
+            return
+        if path == "/api/v1/collectors/migration":
+            payload = collector_migration.migration_status()
+            runtime = collector_runtime()
+            if runtime is not None:
+                payload["collectorsEnabled"] = True
+                payload["collectorCount"] = len(runtime._collectors)
+            else:
+                payload["collectorsEnabled"] = False
+                payload["collectorCount"] = 0
+            self._send_json(200, payload)
+            return
+        if path.startswith("/api/v1/collectors/"):
+            collector_id = path[len("/api/v1/collectors/") :].strip("/")
+            if not collector_id or "/" in collector_id:
+                self._send_json(400, {"error": "invalid collector id"})
+                return
+            runtime = collector_runtime()
+            if runtime is None:
+                self._send_json(404, {"error": "collectors disabled"})
+                return
+            detail = runtime.detail(collector_id, include_data=True)
+            if detail is None:
+                self._send_json(404, {"error": "collector not found"})
+                return
+            self._send_json(200, detail)
             return
         if path.startswith(integrations.FRIGATE_CAMERA_PATH_PREFIX) and path.endswith("/latest.jpg"):
             camera_name = path[len(integrations.FRIGATE_CAMERA_PATH_PREFIX) : -len("/latest.jpg")]
@@ -1389,6 +1487,31 @@ class Handler(BaseHTTPRequestHandler):
                 return
             except Exception as exc:
                 self._send_json(502, {"error": f"camera preview failed: {exc}"})
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Access-Control-Allow-Origin", self._cors_origin())
+            self.send_header("Access-Control-Allow-Credentials", "true")
+            self.send_header("Vary", "Origin")
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        if path.startswith(integrations.FRIGATE_EVENT_PATH_PREFIX):
+            remainder = path[len(integrations.FRIGATE_EVENT_PATH_PREFIX) :].strip("/")
+            parts = remainder.split("/")
+            if len(parts) != 2:
+                self._send_json(400, {"error": "expected /events/{id}/{thumbnail.jpg|snapshot.jpg|clip.mp4}"})
+                return
+            event_id, kind = parts
+            try:
+                body, content_type = integrations.fetch_frigate_event_media(event_id, kind)
+            except ValueError as exc:
+                self._send_json(400, {"error": str(exc)})
+                return
+            except Exception as exc:
+                self._send_json(502, {"error": f"event media failed: {exc}"})
                 return
             self.send_response(200)
             self.send_header("Content-Type", content_type)
@@ -1498,6 +1621,42 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(202, result)
             return
 
+        if path == "/api/v1/admin/settings":
+            updates = body.get("updates") if isinstance(body.get("updates"), dict) else body
+            if not isinstance(updates, dict) or not updates:
+                self._send_json(400, {"error": "missing updates object"})
+                return
+            result = hcc_settings.apply_settings(updates)
+            if not result.get("ok"):
+                self._send_json(400, result)
+                return
+            integrations.reload_configuration()
+            caldav_client.reload_configuration()
+            self._send_json(200, result)
+            return
+
+        if path == "/api/v1/admin/settings/actions/greenlight-collectors":
+            services = body.get("services") if isinstance(body.get("services"), list) else None
+            result = hcc_settings.apply_greenlight_migration(services)
+            if not result.get("ok"):
+                self._send_json(400, result)
+                return
+            integrations.reload_configuration()
+            caldav_client.reload_configuration()
+            self._send_json(200, result)
+            return
+
+        if path == "/api/v1/admin/settings/actions/rollback-collectors":
+            services = body.get("services") if isinstance(body.get("services"), list) else None
+            result = hcc_settings.apply_rollback_migration(services)
+            if not result.get("ok"):
+                self._send_json(400, result)
+                return
+            integrations.reload_configuration()
+            caldav_client.reload_configuration()
+            self._send_json(200, result)
+            return
+
         if path == "/api/v1/integrations/climate/set":
             if not auth.user_has_role(user, "operator"):
                 self._send_json(403, {"error": "operator role required for climate controls"})
@@ -1519,6 +1678,86 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json(502, {"error": f"climate control failed: {exc}"})
                 return
             self._send_json(200, result)
+            return
+
+        if path in ("/api/v1/integrations/frigate/recording", "/api/v1/integrations/frigate/recording/toggle"):
+            if not auth.user_has_role(user, "operator"):
+                self._send_json(403, {"error": "operator role required for Frigate recording controls"})
+                return
+            camera = str(body.get("camera") or "all").strip() or "all"
+            try:
+                if path.endswith("/toggle"):
+                    result = integrations.toggle_frigate_recording(camera)
+                else:
+                    if "enabled" not in body:
+                        raise ValueError("enabled is required")
+                    result = integrations.set_frigate_recording(camera, bool(body.get("enabled")))
+            except ValueError as exc:
+                self._send_json(400, {"error": str(exc)})
+                return
+            except Exception as exc:
+                self._send_json(502, {"error": f"recording control failed: {exc}"})
+                return
+            self._send_json(200, result)
+            return
+
+        if path.startswith("/api/v1/integrations/family/"):
+            if not auth.user_has_role(user, "operator"):
+                self._send_json(403, {"error": "operator role required to manage family board"})
+                return
+            if caldav_client.caldav_configured():
+                self._send_json(
+                    409,
+                    {
+                        "error": "Calendar/chores are managed in Apple Calendar (CalDAV). Local edits are disabled.",
+                        "caldav": True,
+                        "hint": "Add/edit events in Calendar.app; use Reminders or the Chores calendar for tasks.",
+                    },
+                )
+                return
+            actor = str((user or {}).get("username") or (user or {}).get("displayName") or "operator")
+            try:
+                if path == "/api/v1/integrations/family/events":
+                    event = family_board.add_event(body or {}, actor=actor)
+                    self._send_json(200, {"ok": True, "event": event, "board": family_board.snapshot()})
+                    return
+                if path.startswith("/api/v1/integrations/family/events/"):
+                    event_id = path[len("/api/v1/integrations/family/events/") :].strip("/")
+                    action = str((body or {}).get("action") or "update").lower()
+                    if action == "delete":
+                        ok = family_board.delete_event(event_id)
+                        if not ok:
+                            self._send_json(404, {"error": "event not found"})
+                            return
+                        self._send_json(200, {"ok": True, "board": family_board.snapshot()})
+                        return
+                    event = family_board.update_event(event_id, body or {}, actor=actor)
+                    self._send_json(200, {"ok": True, "event": event, "board": family_board.snapshot()})
+                    return
+                if path == "/api/v1/integrations/family/chores":
+                    chore = family_board.add_chore(body or {}, actor=actor)
+                    self._send_json(200, {"ok": True, "chore": chore, "board": family_board.snapshot()})
+                    return
+                if path.startswith("/api/v1/integrations/family/chores/"):
+                    chore_id = path[len("/api/v1/integrations/family/chores/") :].strip("/")
+                    action = str((body or {}).get("action") or "update").lower()
+                    if action == "delete":
+                        ok = family_board.delete_chore(chore_id)
+                        if not ok:
+                            self._send_json(404, {"error": "chore not found"})
+                            return
+                        self._send_json(200, {"ok": True, "board": family_board.snapshot()})
+                        return
+                    chore = family_board.update_chore(chore_id, body or {}, actor=actor)
+                    self._send_json(200, {"ok": True, "chore": chore, "board": family_board.snapshot()})
+                    return
+            except KeyError:
+                self._send_json(404, {"error": "not found"})
+                return
+            except ValueError as exc:
+                self._send_json(400, {"error": str(exc)})
+                return
+            self._send_json(404, {"error": "not found"})
             return
 
         if path == "/api/v1/agent/action-result":
@@ -1599,12 +1838,20 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
+    hcc_settings.load_runtime_settings_file()
+    caldav_client.reload_configuration()
     load_fleet_state()
     load_action_state()
     status = auth.auth_status()
+    runtime = collector_runtime()
+    integration_routing.set_runtime_resolver(collector_runtime)
+    if runtime is not None:
+        runtime.start()
     server = ThreadingHTTPServer((HOST, PORT), Handler)
     print(f"hcc-core listening on {HOST}:{PORT}")
     print(f"hcc-core auth enabled={status['enabled']} ldap={status['ldapConfigured']} localAdmin={status['localAdminConfigured']}")
+    if runtime is not None:
+        print(f"hcc-core collectors enabled count={len(runtime._collectors)}")
     server.serve_forever()
 
 

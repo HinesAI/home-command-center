@@ -1,0 +1,144 @@
+.family-setup-steps {
+  margin: 0 0 14px;
+  padding-left: 1.25rem;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.family-setup-steps li {
+  margin-bottom: 8px;
+}
+
+.family-setup-steps code {
+  color: var(--text);
+  font-size: 0.9em;
+}
+
+.family-page .family-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px 14px;
+  align-items: end;
+}
+
+.family-page .family-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: var(--muted, #9aa7b5);
+}
+
+.family-page .family-form input,
+.family-page .family-form textarea {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.25);
+  color: #f5f7fa;
+  border-radius: 10px;
+  padding: 12px 12px;
+  font: inherit;
+  min-height: 44px;
+}
+
+.family-page .family-form button {
+  min-height: 48px;
+  border-radius: 12px;
+  border: 0;
+  background: #2f6fed;
+  color: white;
+  font-weight: 600;
+  font-size: 1rem;
+  padding: 12px 16px;
+  cursor: pointer;
+}
+
+.family-page .family-span {
+  grid-column: 1 / -1;
+}
+
+.family-page .family-check {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 10px !important;
+  min-height: 44px;
+}
+
+.family-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.family-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.family-item.done {
+  opacity: 0.55;
+}
+
+.family-item h3 {
+  margin: 0 0 4px;
+  font-size: 1.05rem;
+}
+
+.family-item p {
+  margin: 0;
+  color: var(--muted, #9aa7b5);
+  font-size: 0.9rem;
+}
+
+.family-item-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-content: start;
+  justify-content: flex-end;
+}
+
+.family-item-actions button {
+  min-height: 40px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(0, 0, 0, 0.25);
+  color: #f5f7fa;
+  cursor: pointer;
+}
+
+.family-ics-url code {
+  display: block;
+  word-break: break-all;
+  padding: 12px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.3);
+  font-size: 0.85rem;
+}
+
+.family-profile-links {
+  margin: 0 0 12px;
+  padding-left: 1.2rem;
+  color: #c9d4e0;
+}
+
+.family-profile-links a {
+  color: #7eb6ff;
+}
+
+@media (max-width: 720px) {
+  .family-item {
+    grid-template-columns: 1fr;
+  }
+  .family-item-actions {
+    justify-content: stretch;
+  }
+  .family-item-actions button {
+    flex: 1;
+  }
+}

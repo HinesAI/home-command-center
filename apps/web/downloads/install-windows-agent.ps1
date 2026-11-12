@@ -41,15 +41,28 @@ New-Item -ItemType Directory -Force -Path $ConfigDir | Out-Null
 
 Copy-Item -Path (Join-Path $ScriptDir "heartbeat_sender.ps1") -Destination $InstallDir -Force
 Copy-Item -Path (Join-Path $ScriptDir "register-hcc-agent-service.ps1") -Destination $InstallDir -Force
+Copy-Item -Path (Join-Path $ScriptDir "apply-update.ps1") -Destination $InstallDir -Force
+Copy-Item -Path (Join-Path $ScriptDir "install-ca-trust.ps1") -Destination $InstallDir -Force
 if (Test-Path (Join-Path $ScriptDir "diagnose-server-core.ps1")) {
     Copy-Item -Path (Join-Path $ScriptDir "diagnose-server-core.ps1") -Destination $InstallDir -Force
+}
+
+# Trust HCC Local CA (HTTPS for internal apps)
+$caTrust = Join-Path $ScriptDir "install-ca-trust.ps1"
+$caCert = Join-Path $ScriptDir "certs\HCC-Local-CA.crt"
+if (Test-Path $caTrust) {
+    & $caTrust -CertPath $caCert -InstallDir $InstallDir
+} elseif (Test-Path $caCert) {
+    $destDir = Join-Path $InstallDir "certs"
+    New-Item -ItemType Directory -Force -Path $destDir | Out-Null
+    Copy-Item -Path $caCert -Destination (Join-Path $destDir "HCC-Local-CA.crt") -Force
 }
 
 $envLines = @(
     "HCC_CORE_BASE_URL=$CoreBaseUrl"
     "HCC_AGENT_NODE_ID=$NodeId"
     "HCC_AGENT_ID=$AgentId"
-    "HCC_AGENT_VERSION=1.0.6"
+    "HCC_AGENT_VERSION=1.0.10"
     "HCC_AGENT_INTERVAL_SECONDS=$Interval"
     "HCC_SERVICES=$Services"
     "HCC_STORAGE_DRIVES=$StorageDrives"

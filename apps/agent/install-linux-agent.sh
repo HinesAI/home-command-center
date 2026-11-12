@@ -105,15 +105,24 @@ install -m 755 "${SCRIPT_DIR}/heartbeat_sender.py" "${INSTALL_DIR}/heartbeat_sen
 install -m 644 "${SCRIPT_DIR}/host_intelligence.py" "${INSTALL_DIR}/host_intelligence.py"
 install -m 644 "${SCRIPT_DIR}/action_runner.py" "${INSTALL_DIR}/action_runner.py"
 install -m 755 "${SCRIPT_DIR}/apply-update.sh" "${INSTALL_DIR}/apply-update.sh"
+install -m 755 "${SCRIPT_DIR}/install-ca-trust.sh" "${INSTALL_DIR}/install-ca-trust.sh"
 install -m 644 "${SCRIPT_DIR}/hcc-agent.service" "$SERVICE_PATH"
 install -m 644 "${SCRIPT_DIR}/hcc-agent-update.service" "/etc/systemd/system/hcc-agent-update.service"
+
+# Trust HCC Local CA (HTTPS for internal apps)
+if [[ -x "${SCRIPT_DIR}/install-ca-trust.sh" ]]; then
+  "${SCRIPT_DIR}/install-ca-trust.sh" "${SCRIPT_DIR}/certs/HCC-Local-CA.crt" "$INSTALL_DIR"
+elif [[ -f "${SCRIPT_DIR}/certs/HCC-Local-CA.crt" ]]; then
+  install -d -m 755 "${INSTALL_DIR}/certs"
+  install -m 644 "${SCRIPT_DIR}/certs/HCC-Local-CA.crt" "${INSTALL_DIR}/certs/HCC-Local-CA.crt"
+fi
 
 cat > "$ENV_PATH" <<EOF
 HCC_CORE_BASE_URL=${CORE_BASE_URL}
 HCC_CORE_HEARTBEAT_URL=${CORE_HEARTBEAT_URL}
 HCC_AGENT_NODE_ID=${NODE_ID}
 HCC_AGENT_ID=${AGENT_ID}
-HCC_AGENT_VERSION=1.0.5
+HCC_AGENT_VERSION=1.0.6
 HCC_AGENT_INTERVAL_SECONDS=${INTERVAL}
 HCC_SERVICES=${SERVICES}
 HCC_STORAGE_PATHS=${STORAGE_PATHS}
