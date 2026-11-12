@@ -1,0 +1,9 @@
+[Unit]
+Description=Collect Hines Command Center status snapshot
+After=local-fs.target
+RequiresMountsFor=/Backup_Pool/scripts
+
+[Service]
+Type=oneshot
+Environment=TZ=America/Chicago
+ExecStart=/Backup_Pool/scripts/collect-hcc-status.sh

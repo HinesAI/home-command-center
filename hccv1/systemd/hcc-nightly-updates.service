@@ -1,0 +1,15 @@
+[Unit]
+Description=HCC nightly package updates
+After=network-online.target
+Wants=network-online.target
+RequiresMountsFor=/Backup_Pool/scripts
+
+[Service]
+Type=oneshot
+Environment=TZ=America/Chicago
+ExecStart=/Backup_Pool/scripts/hcc-nightly-updates.sh
+Nice=10
+IOSchedulingClass=best-effort
+
+[Install]
+WantedBy=multi-user.target

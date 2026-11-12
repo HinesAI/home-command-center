@@ -1,0 +1,14 @@
+[Unit]
+Description=Bind Quadro 600 to nouveau for tty console
+DefaultDependencies=no
+After=systemd-modules-load.service
+Before=hcc-dashboard.service multi-user.target
+Conflicts=
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/Backup_Pool/scripts/quadro600-bind-nouveau.sh
+
+[Install]
+WantedBy=multi-user.target

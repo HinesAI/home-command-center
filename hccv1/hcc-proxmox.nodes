@@ -1,0 +1,5 @@
+# Proxmox hypervisors (name|ip) — one per line
+# bigbear1 is the replacement host (old .63 is offline)
+bigbear1|x.x.x.x
+bigbear3|x.x.x.x
+bigbear4|x.x.x.x

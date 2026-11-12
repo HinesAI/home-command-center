@@ -1,0 +1,12 @@
+[Unit]
+Description=Nightly HCC package updates (2:00-3:00 AM US/Central)
+
+[Timer]
+# 07:00 UTC = 2:00 AM CDT / 1:00 AM CST; +1h jitter covers the 2-3 AM window.
+OnCalendar=*-*-* 07:00:00
+RandomizedDelaySec=3600
+Persistent=true
+AccuracySec=5min
+
+[Install]
+WantedBy=timers.target

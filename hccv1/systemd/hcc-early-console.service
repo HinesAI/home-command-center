@@ -1,0 +1,22 @@
+[Unit]
+Description=HCC early tty1 hold until dashboard owns console
+DefaultDependencies=no
+After=systemd-udev-trigger.service
+Before=getty@tty1.service
+Conflicts=getty@tty1.service hcc-dashboard.service
+IgnoreOnIsolate=yes
+
+[Service]
+Type=simple
+Environment=TERM=linux
+ExecStart=/usr/local/sbin/hcc-early-console.sh
+StandardInput=tty
+StandardOutput=tty
+StandardError=journal
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+Restart=no
+
+[Install]
+WantedBy=sysinit.target

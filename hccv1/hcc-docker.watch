@@ -1,0 +1,10 @@
+# Docker containers shown on the HCC SERVICES panel (one name per line).
+jellyfin
+qbittorrent
+vericoin
+verium
+verium-testnet
+# ollama — disabled 2026-10-16 (hardware window); models stay on /Backup_Pool/AI/models/ollama
+# ragflow — disabled 2026-10-16; data on /Backup_Pool/AI/ragflow, dump in exports/
+# gluetun — uncomment when using docker-compose.vpn.yml
+# gluetun

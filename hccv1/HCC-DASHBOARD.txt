@@ -1,0 +1,66 @@
+Hines Command Center — Physical Monitor Dashboard
+===============================================
+
+Shows a full-screen ASCII status board on the server's physical monitor (tty1):
+  - ZFS pool health and usage
+  - Docker containers and core services (smbd, winbind, docker)
+  - Network connectivity (gateway, DC, internet)
+  - Host uptime, load, memory, IPs
+
+Refreshes every 2 minutes.
+
+INSTALL (once, as root)
+-----------------------
+  sudo /Backup_Pool/scripts/install-hcc-dashboard.sh
+
+This replaces the login prompt on tty1 with the dashboard and enables a
+systemd timer to refresh status.json every 2 minutes.
+
+MANUAL USE
+----------
+  /Backup_Pool/scripts/hines-command-center-dashboard.sh
+
+Run on tty1 (Ctrl+Alt+F1). Use Ctrl+Alt+F2 for a normal login shell.
+
+FILES
+-----
+  /Backup_Pool/scripts/hines-command-center-dashboard.sh  — display loop
+  /Backup_Pool/scripts/collect-hcc-status.sh                — status snapshot
+  /Backup_Pool/scripts/send-hcc-daily-report.sh             — daily email sender
+  /Backup_Pool/scripts/hcc-status.json                      — cached data
+  /Backup_Pool/scripts/hcc-email.env.example                — SMTP config template
+  /Backup_Pool/scripts/systemd/hcc-dashboard.service      — tty1 service
+
+SERVICE COMMANDS
+----------------
+  sudo systemctl status hcc-dashboard
+  sudo systemctl restart hcc-dashboard
+  sudo systemctl stop hcc-dashboard && sudo systemctl start getty@tty1
+
+BOOT / POWER LOSS
+-----------------
+The dashboard is managed by systemd and enabled for multi-user.target boot.
+After an outage, it should come back on tty1 automatically.
+
+If tty1 shows a normal login instead of the dashboard:
+  sudo /Backup_Pool/scripts/install-hcc-dashboard.sh
+
+Manual start (delegates to systemd when the unit is installed):
+  /Backup_Pool/scripts/start-hcc-dashboard.sh
+
+Recovery if the service is stuck restarting:
+  sudo pkill -9 -f hines-command-center-dashboard.sh
+  sudo rm -f /Backup_Pool/scripts/hcc-dashboard.lock /Backup_Pool/scripts/hcc-dashboard.pid
+  sudo systemctl restart hcc-dashboard
+
+DAILY EMAIL REPORTS
+-------------------
+  cp /Backup_Pool/scripts/hcc-email.env.example /Backup_Pool/scripts/hcc-email.env
+  # edit to set to/from and SMTP credentials
+  chmod 600 /Backup_Pool/scripts/hcc-email.env
+  sudo systemctl daemon-reload
+  sudo systemctl enable --now hcc-daily-report.timer
+  sudo systemctl start hcc-daily-report.service
+
+Run a dry test without sending:
+  HCC_EMAIL_DRY_RUN=1 /Backup_Pool/scripts/send-hcc-daily-report.sh

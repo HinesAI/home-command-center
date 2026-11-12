@@ -1,0 +1,353 @@
+#!/usr/bin/env bash
+# HCC appliance verbose boot narrative (sourced by hcc-terminal / live dashboard).
+# Expects parent theme/helpers: OK WARN BAD CYN DIM MUTED LOGO ACCENT BOLD R
+# screen_clear load_fitted_logo STATUS_FILE TTY_DEV SCREEN_ROWS
+#
+# REAL readiness waits — not theatrical. A line prints only after the check passes
+# (or times out → warn/fail).
+#
+# Fixed header:
+#   HINES COMMAND CENTER + logo
+#   Server is starting — please wait
+# Scrolling region:
+#   > Service X started
+# Then color splash + startup sound → live dashboard.
+
+BOOT_STEP_TIMEOUT="${HCC_BOOT_STEP_TIMEOUT:-90}"
+BOOT_STEP_PAUSE="${HCC_BOOT_STEP_PAUSE:-0.06}"
+BOOT_INTRO_HOLD="${HCC_BOOT_INTRO_HOLD:-2.0}"
+BOOT_COMPLETE_HOLD="${HCC_BOOT_COMPLETE_HOLD:-1.2}"
+BOOT_FIXED_ROWS=0
+BOOT_NOTICE_ROW=0
+
+_hcc_boot_unit_ready() {
+	# True only when the unit has actually reached a finished-good state.
+	local unit=$1
+	local state type result cond
+	cond="$(systemctl show -p ConditionResult --value "$unit" 2>/dev/null || true)"
+	# Unit intentionally not applicable on this host — not a failure.
+	[[ "$cond" == "no" ]] && return 0
+
+	state="$(systemctl show -p ActiveState --value "$unit" 2>/dev/null || true)"
+	type="$(systemctl show -p Type --value "$unit" 2>/dev/null || true)"
+	result="$(systemctl show -p Result --value "$unit" 2>/dev/null || true)"
+
+	case "$state" in
+		active) return 0 ;;
+		failed) return 1 ;;
+		activating|reloading) return 1 ;;
+	esac
+
+	# oneshot/dbus/idle that already succeeded end as inactive + success
+	if [[ "$type" == "oneshot" || "$type" == "dbus" || "$type" == "idle" ]]; then
+		[[ "$result" == "success" && ("$state" == "inactive" || "$state" == "dead") ]] && return 0
+	fi
+	# exec-condition skipped start
+	[[ "$result" == "exec-condition" ]] && return 0
+	return 1
+}
+
+_hcc_boot_unit_failed() {
+	local unit=$1
+	local state
+	state="$(systemctl show -p ActiveState --value "$unit" 2>/dev/null || true)"
+	[[ "$state" == "failed" ]]
+}
+
+_hcc_boot_check() {
+	case "$1" in
+		console) [[ -w "${HCC_TTY:-$TTY_DEV}" ]] || [[ -w /dev/tty1 ]] ;;
+		network)
+			# Require a real default route, not just a network daemon unit.
+			ip -4 route show default 2>/dev/null | grep -q .
+			;;
+		gateway)
+			local gw
+			gw="$(ip -4 route show default 2>/dev/null | awk '{print $3; exit}')"
+			[[ -n "$gw" ]] && ping -c1 -W2 "$gw" >/dev/null 2>&1
+			;;
+		docker)
+			systemctl is-active --quiet docker 2>/dev/null \
+				&& docker info >/dev/null 2>&1
+			;;
+		audio) [[ -e /dev/snd/pcmC0D0p ]] || [[ -e /dev/snd/controlC0 ]] ;;
+		status) [[ -r "${STATUS_FILE:-/dev/null}" ]] ;;
+		unit)
+			_hcc_boot_unit_ready "$2"
+			;;
+		container)
+			command -v docker >/dev/null 2>&1 || return 1
+			# Running only — not merely created/exited.
+			docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$2"
+			;;
+		pool)
+			command -v zpool >/dev/null 2>&1 || return 0
+			zpool list -H -o health "$2" 2>/dev/null | grep -qiE 'ONLINE|DEGRADED'
+			;;
+		*) return 1 ;;
+	esac
+}
+
+_hcc_boot_wait() {
+	# Blocks until ready. Prints: ok | warn | fail | skip
+	local id=$1 arg=${2:-}
+	local deadline=$((SECONDS + BOOT_STEP_TIMEOUT))
+	local soft=0 state
+	case "$id" in gateway|audio|status|container) soft=1 ;; esac
+
+	# Units: never burn the full timeout on enabled-but-not-running noise.
+	# Only poll while activating; active=ok, failed=fail, idle inactive=skip.
+	if [[ "$id" == "unit" ]]; then
+		if _hcc_boot_unit_failed "$arg"; then
+			echo fail
+			return 0
+		fi
+		if _hcc_boot_unit_ready "$arg"; then
+			echo ok
+			return 0
+		fi
+		state="$(systemctl show -p ActiveState --value "$arg" 2>/dev/null || true)"
+		case "$state" in
+			activating|reloading) ;;
+			*)
+				echo skip
+				return 0
+				;;
+		esac
+	fi
+
+	while (( SECONDS < deadline )); do
+		if [[ "$id" == "unit" ]] && _hcc_boot_unit_failed "$arg"; then
+			echo fail
+			return 0
+		fi
+		if _hcc_boot_check "$id" "$arg"; then
+			echo ok
+			return 0
+		fi
+		if [[ "$id" == "unit" ]]; then
+			state="$(systemctl show -p ActiveState --value "$arg" 2>/dev/null || true)"
+			case "$state" in
+				activating|reloading) ;;
+				active) echo ok; return 0 ;;
+				failed) echo fail; return 0 ;;
+				*) echo skip; return 0 ;;
+			esac
+		fi
+		sleep 0.35
+	done
+	(( soft )) && echo warn || echo fail
+}
+
+_hcc_boot_paint_header() {
+	local cols=$1
+	local -a logo_lines=()
+	local line rows
+	mapfile -t logo_lines < <(load_fitted_logo "$cols" 2>/dev/null || true)
+	(( ${#logo_lines[@]} > 7 )) && logo_lines=("${logo_lines[@]:0:7}")
+
+	printf '\033[r'
+	screen_clear
+
+	printf '%sHINES COMMAND CENTER%s\n\n' "${BOLD}${ACCENT}" "${R}"
+	BOOT_FIXED_ROWS=2
+	for line in "${logo_lines[@]}"; do
+		printf '%s%s%s\n' "${LOGO}" "$line" "${R}"
+		BOOT_FIXED_ROWS=$((BOOT_FIXED_ROWS + 1))
+	done
+	printf '\n%s%s%s\n\n' "${DIM}" "$(printf '%.0s─' $(seq 1 $(( cols < 72 ? cols : 72 ))))" "${R}"
+	BOOT_FIXED_ROWS=$((BOOT_FIXED_ROWS + 3))
+
+	BOOT_NOTICE_ROW=$((BOOT_FIXED_ROWS + 1))
+	printf '  %sServer is starting — please wait%s\n\n' "${BOLD}${CYN}" "${R}"
+	BOOT_FIXED_ROWS=$((BOOT_FIXED_ROWS + 2))
+
+	rows=${SCREEN_ROWS:-0}
+	if (( rows < 24 )); then
+		rows="$(stty size <"${HCC_TTY:-$TTY_DEV}" 2>/dev/null | awk '{print $1}')"
+		rows=${rows:-48}
+	fi
+	(( rows < 24 )) && rows=48
+
+	if (( BOOT_FIXED_ROWS + 3 < rows )); then
+		printf '\033[%d;%dr' "$((BOOT_FIXED_ROWS + 1))" "$rows"
+		printf '\033[%d;1H' "$((BOOT_FIXED_ROWS + 1))"
+	fi
+}
+
+_hcc_boot_finish_notice() {
+	local msg=$1
+	local color=${2:-$OK}
+	printf '\0337'
+	printf '\033[%d;1H\033[2K' "$BOOT_NOTICE_ROW"
+	printf '  %s%s%s' "${BOLD}${color}" "$msg" "$R"
+	printf '\0338'
+}
+
+_hcc_boot_reset_scroll() {
+	printf '\033[r'
+}
+
+_hcc_boot_line() {
+	local kind=$1 msg=$2 color prefix
+	case "$kind" in
+		warn) color=$WARN; prefix='!' ;;
+		fail) color=$BAD; prefix='x' ;;
+		info) color=${INFO:-$MUTED}; prefix='-' ;;
+		*) color=$OK; prefix='>' ;;
+	esac
+	printf '  %s%s %s%s\n' "$color" "$prefix" "$msg" "$R"
+	sleep "$BOOT_STEP_PAUSE"
+}
+
+_hcc_boot_note() {
+	_hcc_boot_line "$1" "$2"
+}
+
+_hcc_boot_step() {
+	local result
+	if [[ $# -eq 2 ]]; then
+		result="$(_hcc_boot_wait "$1")"
+		[[ "$result" == skip ]] && return 0
+		_hcc_boot_line "$result" "$2"
+	else
+		result="$(_hcc_boot_wait "$1" "$2")"
+		[[ "$result" == skip ]] && return 0
+		_hcc_boot_line "$result" "$3"
+	fi
+}
+
+_hcc_boot_should_track_unit() {
+	# Skip units that are noise / optional / not meaningful for appliance readiness.
+	local svc=$1
+	case "$svc" in
+		snapd.*|getty@*|serial-getty@*|console-getty|container-getty@*) return 1 ;;
+		systemd-*-generator|*-generator) return 1 ;;
+		plymouth-*|ureadahead*|apt-daily*|apt-news*|motd-news*) return 1 ;;
+		grub-*|secureboot-db|finalrd|e2scrub*) return 1 ;;
+		nvidia-hibernate|nvidia-resume|nvidia-suspend) return 1 ;;
+		# Optional / often failed or N/A on this bare-metal host
+		openipmi|open-vm-tools|vgauth|rpc-svcgssd|rpc-gssd|nfs-blkmap) return 1 ;;
+		samba-ad-dc|sssd|cloud-*|pollinate|ua-*|ubuntu-advantage|ubuntu-fan) return 1 ;;
+		hcc-early-console|hcc-dashboard|ModemManager) return 1 ;;
+		networkd-dispatcher|dmesg) return 1 ;;
+	esac
+	return 0
+}
+
+draw_startup_verbose_boot() {
+	local cols=$1
+	local result svc name pool
+	INFO="${INFO:-$'\033[38;5;250m'}"
+
+	_hcc_boot_paint_header "$cols"
+	sleep "$BOOT_INTRO_HOLD"
+
+	_hcc_boot_note info "Kernel handoff complete"
+	_hcc_boot_note info "Init system online (systemd)"
+
+	_hcc_boot_step console "Service console tty1 started"
+	_hcc_boot_note ok "Service block devices started"
+
+	if command -v zpool >/dev/null 2>&1; then
+		_hcc_boot_note ok "Service ZFS modules started"
+		while IFS= read -r pool; do
+			[[ -z "$pool" ]] && continue
+			_hcc_boot_step pool "$pool" "Service ZFS pool ${pool} started"
+		done < <(zpool list -H -o name 2>/dev/null)
+	fi
+
+	# Network must be truly routable before we claim gateway/services.
+	_hcc_boot_step network "Service network stack started"
+	_hcc_boot_step gateway "Service gateway started"
+
+	# Core appliance services only — not every enabled unit on the box.
+	local -a core_svcs=(
+		ssh smbd nmbd winbind docker containerd
+		nfs-server cron rsyslog systemd-timesyncd
+		hcc-agent
+	)
+	local svc
+	for svc in "${core_svcs[@]}"; do
+		systemctl list-unit-files "${svc}.service" --no-legend 2>/dev/null | grep -q . || continue
+		_hcc_boot_step unit "${svc}.service" "Service ${svc} started"
+	done
+	# Plus a short pass over other enabled units that are already active/activating
+	# (no 90s waits on idle enabled-but-not-running units — those are skipped).
+	while IFS= read -r svc; do
+		[[ -z "$svc" ]] && continue
+		_hcc_boot_should_track_unit "$svc" || continue
+		case " ${core_svcs[*]} " in
+			*" $svc "*) continue ;;
+		esac
+		_hcc_boot_step unit "${svc}.service" "Service ${svc} started"
+	done < <(systemctl list-unit-files --type=service --state=enabled --no-legend --no-pager 2>/dev/null \
+		| awk '{print $1}' | sed 's/\.service$//' | head -n 60)
+
+	# Docker API must answer before containers count as started.
+	_hcc_boot_step docker "Service Docker engine started"
+
+	if command -v docker >/dev/null 2>&1; then
+		local watch=""
+		for watch in \
+			"${HCC_DOCKER_WATCH:-}" \
+			"${CONFIG_DIR:-}/hcc-docker.watch" \
+			"/Backup_Pool/scripts/hcc-docker.watch" \
+			"/etc/hcc-terminal/hcc-docker.watch"
+		do
+			[[ -n "$watch" && -r "$watch" ]] && break
+			watch=""
+		done
+		if [[ -n "$watch" ]]; then
+			while IFS= read -r name || [[ -n "$name" ]]; do
+				name="${name%%#*}"
+				name="$(echo "$name" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+				[[ -z "$name" ]] && continue
+				_hcc_boot_step container "$name" "Service ${name} started"
+			done < "$watch"
+		else
+			# Fallback: whatever is already running (warm path).
+			while IFS= read -r name; do
+				[[ -z "$name" ]] && continue
+				_hcc_boot_step container "$name" "Service ${name} started"
+			done < <(docker ps --format '{{.Names}}' 2>/dev/null | head -n 40)
+		fi
+	fi
+
+	result="$(_hcc_boot_wait audio)"
+	if [[ "$result" == ok ]]; then
+		_hcc_boot_line ok "Service audio started"
+	else
+		_hcc_boot_line warn "Service audio started with warnings"
+	fi
+
+	# Telemetry file may not exist yet on cold boot — soft wait.
+	_hcc_boot_step status "Service telemetry snapshot started"
+
+	_hcc_boot_finish_notice "Server startup complete" "$OK"
+	_hcc_boot_note ok "System ready"
+	_hcc_boot_reset_scroll
+	sleep "$BOOT_COMPLETE_HOLD"
+}
+
+draw_startup_circle_fb() {
+	# Graphical circular boot on /dev/fb0 — replaces the text "Server is starting" screen.
+	local script="${HCC_CIRCLE_BOOT_FB:-/Backup_Pool/scripts/hcc-boot-circle-fb.py}"
+	[[ "${HCC_PREVIEW:-}" == 1 ]] && return 1
+	[[ -r "$script" ]] || return 1
+	command -v python3 >/dev/null 2>&1 || return 1
+	[[ -w /dev/fb0 ]] || return 1
+	# Circle sequence owns the startup sound; skip the later color-splash sting.
+	HCC_STARTUP_SOUND_ENABLED="${HCC_STARTUP_SOUND_ENABLED:-1}" \
+		python3 "$script"
+}
+
+draw_startup_appliance() {
+	# Prefer the circular framebuffer boot. Fall back to the classic verbose
+	# text narrative + color splash if fb/python isn't available.
+	if draw_startup_circle_fb "$1"; then
+		return 0
+	fi
+	draw_startup_verbose_boot "$1"
+	draw_startup_color_splash "$1"
+}

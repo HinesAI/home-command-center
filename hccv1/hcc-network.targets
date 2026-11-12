@@ -1,0 +1,7 @@
+# name|target|label — ping targets for dashboard
+gateway|x.x.x.x|UDM Pro
+hinesdc1|x.x.x.x|AD DC 1
+hinesdc2|x.x.x.x|AD DC 2
+hinesdc3|x.x.x.x|AD DC 3
+storage|x.x.x.x|bigbear2
+internet|1.1.1.1|Internet

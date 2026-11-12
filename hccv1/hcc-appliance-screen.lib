@@ -1,0 +1,176 @@
+#!/usr/bin/env bash
+# Shared HCC appliance full-screen messages (halt, maintenance, updates).
+# Prefers the circular framebuffer animation with real font lettering;
+# falls back to the legacy tty/figlet layout if fb/python is unavailable.
+# Sourced by hcc-appliance-halt.sh, hcc-nightly-updates.sh, and the dashboard.
+
+: "${ROOT:=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)}"
+: "${TTY_DEV:=${HCC_TTY:-/dev/tty1}}"
+: "${BANNER_FILE:=${HCC_BANNER_WIDE:-$ROOT/hcc-banner.txt}}"
+: "${HALT_MSG_PY:=${HCC_HALT_MSG_PY:-$ROOT/hcc-halt-preview-gif.py}}"
+: "${CIRCLE_FB_PY:=${HCC_CIRCLE_BOOT_FB:-$ROOT/hcc-boot-circle-fb.py}}"
+: "${CIRCLE_PID_FILE:=${HCC_CIRCLE_PID_FILE:-/run/hcc-circle-status.pid}}"
+
+export TERM=linux
+R=$'\033[0m'
+BOLD=$'\033[1m'
+DIM=$'\033[2m'
+ACCENT=$'\033[1;36m'
+LOGO=$'\033[38;5;117m'
+
+hcc_circle_fb_available() {
+	[[ "${HCC_PREVIEW:-}" == 1 ]] && return 1
+	[[ -r "$CIRCLE_FB_PY" ]] || return 1
+	command -v python3 >/dev/null 2>&1 || return 1
+	[[ -w /dev/fb0 ]] || return 1
+	return 0
+}
+
+hcc_circle_stop() {
+	local pid=""
+	if [[ -r "$CIRCLE_PID_FILE" ]]; then
+		pid="$(cat "$CIRCLE_PID_FILE" 2>/dev/null || true)"
+		rm -f "$CIRCLE_PID_FILE" 2>/dev/null || true
+	fi
+	if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+		kill "$pid" 2>/dev/null || true
+		wait "$pid" 2>/dev/null || true
+	fi
+	# Also clear any orphaned status spinners we own (never touch --mode boot).
+	local m
+	for m in updates reboot shutdown maintenance; do
+		pkill -f "hcc-boot-circle-fb.py --mode ${m}" >/dev/null 2>&1 || true
+	done
+}
+
+hcc_circle_paint_once() {
+	local mode=$1
+	hcc_circle_fb_available || return 1
+	python3 "$CIRCLE_FB_PY" --mode "$mode" --once >/dev/null 2>&1
+}
+
+hcc_circle_start() {
+	# Continuous spinner. Extra args after mode are forwarded (--hold / --until-file).
+	local mode=$1
+	shift || true
+	hcc_circle_fb_available || return 1
+	hcc_circle_stop
+	python3 "$CIRCLE_FB_PY" --mode "$mode" "$@" >/dev/null 2>&1 &
+	echo $! >"$CIRCLE_PID_FILE" 2>/dev/null || true
+	return 0
+}
+
+hcc_screen_figlet() {
+	local text=$1
+	local fig_font=${2:-standard}
+	if command -v figlet >/dev/null 2>&1; then
+		figlet -f "$fig_font" -w 400 "$text" 2>/dev/null
+	else
+		printf '%s\n' "$text"
+	fi
+}
+
+hcc_screen_message_lines() {
+	local mode=$1 cols=$2 logo_rows=$3
+	local usable phrase w fig_font
+	local -a fonts=(big standard slant small term) lines=()
+	usable=$(( cols > 4 ? cols - 2 : cols ))
+	(( usable < 20 )) && usable=20
+
+	if [[ -r "$HALT_MSG_PY" ]] && command -v python3 >/dev/null 2>&1; then
+		python3 "$HALT_MSG_PY" --print-ascii --mode "$mode" --cols "$cols" --logo-rows "$logo_rows" 2>/dev/null && return
+	fi
+
+	case "$mode" in
+		reboot) phrase="Server Reboot In Progress" ;;
+		maintenance) phrase="Maintenance In Progress" ;;
+		updates) phrase="Updates In Progress Please Wait" ;;
+		*) phrase="Server Shutdown In Progress" ;;
+	esac
+	for fig_font in "${fonts[@]}"; do
+		mapfile -t lines < <(hcc_screen_figlet "$phrase" "$fig_font" | sed '/^$/d')
+		w=0
+		local line
+		for line in "${lines[@]}"; do
+			(( ${#line} > w )) && w=${#line}
+		done
+		if (( w > 0 && w <= usable )); then
+			printf '%s\n' "${lines[@]}"
+			return
+		fi
+	done
+	printf '%s\n' "$phrase"
+}
+
+hcc_screen_paint_ascii() {
+	local mode=$1
+	local cols rows logo_rows msg_h start_row pad line out
+	local -a msg_lines=()
+
+	cols="$(stty size <"$TTY_DEV" 2>/dev/null | awk '{print $2}')"
+	rows="$(stty size <"$TTY_DEV" 2>/dev/null | awk '{print $1}')"
+	cols=${cols:-128}
+	rows=${rows:-40}
+
+	if ! { exec {out}>"$TTY_DEV"; } 2>/dev/null; then
+		out=1
+	fi
+
+	printf '\033[r\033[?25l\033[H\033[2J\033[3J' >&$out
+
+	printf '%sHINES COMMAND CENTER%s\n\n' "$BOLD$ACCENT" "$R" >&$out
+	logo_rows=0
+	if [[ -r "$BANNER_FILE" ]]; then
+		while IFS= read -r line; do
+			[[ -z "$line" ]] && continue
+			printf '%s%s%s\n' "$LOGO" "$line" "$R" >&$out
+			logo_rows=$((logo_rows + 1))
+			(( logo_rows >= 7 )) && break
+		done < "$BANNER_FILE"
+	else
+		while IFS= read -r line; do
+			[[ -z "$line" ]] && continue
+			printf '%s%s%s\n' "$LOGO" "$line" "$R" >&$out
+			logo_rows=$((logo_rows + 1))
+		done < <(hcc_screen_figlet "HINES" banner)
+	fi
+	(( logo_rows < 1 )) && logo_rows=7
+
+	printf '\n%s%s%s\n' "$DIM" "$(printf '%.0s─' $(seq 1 $(( cols < 72 ? cols : 72 ))))" "$R" >&$out
+
+	mapfile -t msg_lines < <(hcc_screen_message_lines "$mode" "$cols" "$logo_rows")
+	msg_h=${#msg_lines[@]}
+	if (( msg_h < 1 )); then
+		(( out != 1 )) && exec {out}>&-
+		return 0
+	fi
+
+	start_row=$(( (rows - msg_h) / 2 + 1 ))
+	local min_row=$((logo_rows + 6))
+	(( start_row < min_row )) && start_row=$min_row
+
+	local i=0
+	for line in "${msg_lines[@]}"; do
+		pad=$(( (cols - ${#line}) / 2 ))
+		(( pad < 0 )) && pad=0
+		printf '\033[%d;1H%s%*s%s%s\n' "$((start_row + i))" "$LOGO" "$pad" "" "$line" "$R" >&$out
+		i=$((i + 1))
+	done
+
+	(( out != 1 )) && exec {out}>&-
+}
+
+hcc_screen_paint() {
+	local mode=$1
+	# Prefer one framebuffer frame with real type. Callers that need a continuous
+	# spinner should use hcc_circle_start; this keeps repaint loops working.
+	if hcc_circle_paint_once "$mode"; then
+		return 0
+	fi
+	hcc_screen_paint_ascii "$mode"
+}
+
+# Back-compat aliases for halt script.
+hcc_halt_figlet() { hcc_screen_figlet "$@"; }
+hcc_halt_message_lines() { hcc_screen_message_lines "$@"; }
+hcc_halt_paint() { hcc_screen_paint "$@"; }

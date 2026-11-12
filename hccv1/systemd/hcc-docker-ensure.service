@@ -1,0 +1,14 @@
+[Unit]
+Description=Ensure HCC watched Docker containers are running
+After=docker.service
+Wants=docker.service
+RequiresMountsFor=/Backup_Pool/scripts
+
+[Service]
+Type=oneshot
+Environment=TZ=America/Chicago
+ExecStart=/Backup_Pool/scripts/hcc-docker-ensure.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,8 @@
+[Unit]
+Description=Send Hines Command Center daily email report
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/Backup_Pool/scripts/send-hcc-daily-report.sh
